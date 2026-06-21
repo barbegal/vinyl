@@ -17,6 +17,23 @@ fi
 ROTATE="${1:-270}"
 PANEL="${2:-28c}"
 APP_USER="${3:-${SUDO_USER:-vinyl}}"
+INSTALL_BUTTONS=0
+
+for arg in "$@"; do
+  case "$arg" in
+    --buttons) INSTALL_BUTTONS=1 ;;
+  esac
+done
+
+# Positional args (skip --buttons flag).
+args=()
+for arg in "$@"; do
+  [[ "$arg" == "--buttons" ]] && continue
+  args+=("$arg")
+done
+ROTATE="${args[0]:-$ROTATE}"
+PANEL="${args[1]:-$PANEL}"
+APP_USER="${args[2]:-$APP_USER}"
 
 case "$ROTATE" in
   0|90|180|270) ;;
@@ -72,6 +89,10 @@ if [[ -n "$CONFIG_TXT" ]]; then
   sed -i '/^dtoverlay=pitft28/d' "$CONFIG_TXT"
   sed -i '/^disable_splash=/d' "$CONFIG_TXT"
   sed -i '/^dtoverlay=pitft28/s/,drm//g; s/drm,//g' "$CONFIG_TXT" 2>/dev/null || true
+  # Dedupe spi=on — multiple lines confuse some firmware parsers.
+  if grep -qE '^dtparam=spi=on' "$CONFIG_TXT"; then
+    sed -i '/^dtparam=spi=on$/d' "$CONFIG_TXT"
+  fi
 
   {
     echo ""
@@ -198,9 +219,10 @@ fi
 
 echo ""
 echo "PiTFT (${PANEL}) rotate=${ROTATE} on /dev/fb1."
-echo "If upside down, flip: sudo $0 90 $PANEL   (or 270)"
+echo "If upside down, flip: sudo bash $0 90 $PANEL   (or 270)"
+echo "Plate buttons (optional): sudo bash $APP_DIR/scripts/setup_pitft_buttons.sh"
 echo "Reboot to apply: sudo reboot"
 
-if [[ -x "$APP_DIR/scripts/setup_pitft_buttons.sh" ]]; then
-  "$APP_DIR/scripts/setup_pitft_buttons.sh"
+if [[ "$INSTALL_BUTTONS" -eq 1 && -f "$APP_DIR/scripts/setup_pitft_buttons.sh" ]]; then
+  bash "$APP_DIR/scripts/setup_pitft_buttons.sh"
 fi

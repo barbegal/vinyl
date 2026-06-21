@@ -24,13 +24,20 @@ fi
 
 echo "Configuring PiTFT plate buttons in $CONFIG_TXT"
 
-# Remove prior vinyl gpio-key lines.
+# Remove prior vinyl gpio-key lines (any pitft label or plate GPIO).
 sed -i '/^# vinyl pitft plate buttons$/,/^# end vinyl pitft plate buttons$/d' "$CONFIG_TXT"
-sed -i '/^dtoverlay=gpio-key,gpio=17,.*label=pitft-/d' "$CONFIG_TXT"
-sed -i '/^dtoverlay=gpio-key,gpio=22,.*label=pitft-/d' "$CONFIG_TXT"
-sed -i '/^dtoverlay=gpio-key,gpio=23,.*label=pitft-/d' "$CONFIG_TXT"
-sed -i '/^dtoverlay=gpio-key,gpio=27,.*label=pitft-/d' "$CONFIG_TXT"
+sed -i '/^dtoverlay=gpio-key,gpio=17,/d' "$CONFIG_TXT"
+sed -i '/^dtoverlay=gpio-key,gpio=22,/d' "$CONFIG_TXT"
+sed -i '/^dtoverlay=gpio-key,gpio=23,/d' "$CONFIG_TXT"
+sed -i '/^dtoverlay=gpio-key,gpio=27,/d' "$CONFIG_TXT"
 sed -i '/^dtoverlay=gpio-key,gpio=25,.*label=pitft-/d' "$CONFIG_TXT"
+sed -i '/^dtoverlay=gpio-key,.*label=pitft-/d' "$CONFIG_TXT"
+
+before="$(grep -c '^dtoverlay=gpio-key,' "$CONFIG_TXT" 2>/dev/null || echo 0)"
+if [[ "$before" -gt 0 ]]; then
+  echo "  WARNING: $before other gpio-key line(s) still in config — may conflict with plate GPIO"
+  grep '^dtoverlay=gpio-key,' "$CONFIG_TXT" | sed 's/^/    /'
+fi
 
 {
   echo "# vinyl pitft plate buttons"
