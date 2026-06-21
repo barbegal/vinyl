@@ -9,8 +9,8 @@ LOG="${HOME}/.vinyl-xsession.log"
 # Load .env so remote-mirror settings (VINYL_MIRROR_VNC etc.) are available here.
 if [ -f "$APP_DIR/.env" ]; then
   set -a
-  # shellcheck source=/dev/null
-  . "$APP_DIR/.env"
+  # shellcheck source=load_env.sh
+  . "$APP_DIR/scripts/load_env.sh"
   set +a
 fi
 

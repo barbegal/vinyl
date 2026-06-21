@@ -98,6 +98,11 @@ fi
 if [[ ! -f "$APP_DIR/.env" ]]; then
   cp "$APP_DIR/.env.example" "$APP_DIR/.env"
   echo "  created .env from .env.example"
+else
+  if head -1 "$APP_DIR/.env" | grep -qE '^@'; then
+    sed -i '1{/^@/d;}' "$APP_DIR/.env"
+    echo "  removed invalid first line from .env (git diff header)"
+  fi
 fi
 
 if command -v systemctl >/dev/null 2>&1; then

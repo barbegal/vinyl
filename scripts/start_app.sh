@@ -18,8 +18,8 @@ source "$APP_DIR/.venv/bin/activate"
 
 if [[ -f "$APP_DIR/.env" ]]; then
   set -a
-  # shellcheck source=/dev/null
-  source "$APP_DIR/.env"
+  # shellcheck source=load_env.sh
+  source "$APP_DIR/scripts/load_env.sh"
   set +a
 fi
 
