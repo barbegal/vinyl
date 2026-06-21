@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Disable Raspberry Pi Desktop and boot straight to multi-user + our app.
+# Configure fast, desktop-free boot: multi-user target + tty1 autologin.
+# X is started from the login session (startx), so the user owns the VT.
 set -euo pipefail
 
 if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
@@ -7,10 +8,12 @@ if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
   exit 1
 fi
 
+APP_USER="${1:-${SUDO_USER:-vinyl}}"
+
 echo "Setting default boot target to multi-user (no desktop)..."
 systemctl set-default multi-user.target
 
-echo "Stopping and disabling desktop session managers..."
+echo "Disabling desktop session managers..."
 DESKTOP_SERVICES=(
   display-manager.service
   lightdm.service
@@ -22,7 +25,6 @@ DESKTOP_SERVICES=(
   labwc.service
   graphical.service
 )
-
 for svc in "${DESKTOP_SERVICES[@]}"; do
   if systemctl list-unit-files "$svc" 2>/dev/null | grep -q "$svc"; then
     systemctl disable --now "$svc" 2>/dev/null || true
@@ -30,8 +32,31 @@ for svc in "${DESKTOP_SERVICES[@]}"; do
   fi
 done
 
-# Do not use raspi-config B2 (console autologin) — it keeps getty@tty1 active on tty1.
-# X runs on vt7 via the service; tty1 can stay for emergency console + SSH.
+echo "Enabling tty1 autologin for $APP_USER..."
+OVERRIDE_DIR="/etc/systemd/system/getty@tty1.service.d"
+mkdir -p "$OVERRIDE_DIR"
+cat > "$OVERRIDE_DIR/autologin.conf" <<EOF
+[Service]
+ExecStart=
+ExecStart=-/sbin/agetty --autologin $APP_USER --noclear %I \$TERM
+EOF
+systemctl enable getty@tty1.service 2>/dev/null || true
+echo "  wrote $OVERRIDE_DIR/autologin.conf"
+
+# Let console users start X (default on Pi; ensure it).
+XWRAPPER="/etc/X11/Xwrapper.config"
+if [[ -d /etc/X11 ]]; then
+  cat > "$XWRAPPER" <<'EOF'
+allowed_users=console
+needs_root_rights=yes
+EOF
+  echo "  configured $XWRAPPER"
+fi
+
+if id "$APP_USER" &>/dev/null; then
+  usermod -aG video,render,tty,input,audio "$APP_USER" 2>/dev/null || true
+  echo "  added $APP_USER to video,render,tty,input,audio groups"
+fi
 
 # Optional: skip waiting on boot splash (faster to usable screen).
 if systemctl list-unit-files plymouth-quit-wait.service 2>/dev/null | grep -q plymouth; then
@@ -39,22 +64,8 @@ if systemctl list-unit-files plymouth-quit-wait.service 2>/dev/null | grep -q pl
   echo "  disabled plymouth-quit-wait"
 fi
 
-# Allow the app user to start X without a desktop login session.
-XWRAPPER="/etc/X11/Xwrapper.config"
-if [[ -f "$XWRAPPER" ]] || [[ -d /etc/X11 ]]; then
-  cat > "$XWRAPPER" <<'EOF'
-allowed_users=anybody
-needs_root_rights=yes
-EOF
-  echo "  configured $XWRAPPER"
-fi
-
-APP_USER="${SUDO_USER:-vinyl}"
-if id "$APP_USER" &>/dev/null; then
-  usermod -aG video,tty,input "$APP_USER" 2>/dev/null || true
-  echo "  added $APP_USER to video,tty,input groups"
-fi
+systemctl daemon-reload
 
 echo ""
-echo "Fast boot enabled. Default target is now: $(systemctl get-default)"
+echo "Fast boot configured. Default target: $(systemctl get-default)"
 echo "Reboot to apply: sudo reboot"

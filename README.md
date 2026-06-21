@@ -53,40 +53,43 @@ Controls:
 - tap the active (green) speaker again to stop
 - `Esc`: exit app
 
-## Install boot service (fast startup — no Raspberry Pi Desktop)
+## Fast boot — no Raspberry Pi Desktop (kiosk mode)
 
-The installer **turns off the full desktop** and boots only X + this app.
+Instead of a desktop or a systemd-launched X (which can't own a virtual console),
+this boots to **console, autologs in on tty1, and runs `startx`** with only the cast app.
+The login session owns the VT, so X starts cleanly and fast.
 
 ```bash
 cd /home/vinyl/Desktop/vinyl
-sudo apt install -y xinit xserver-xorg
 chmod +x scripts/install_service.sh
 ./scripts/install_service.sh
 sudo reboot
 ```
 
-After reboot you should **not** see the Raspberry Pi desktop — only the cast UI on the touchscreen.
+The installer:
 
-Verify:
+- installs `xinit` / `xserver-xorg`
+- sets the boot target to `multi-user.target` and disables the desktop
+- enables **tty1 autologin** for your user
+- writes `~/.xinitrc` (runs the app) and a `startx` guard in `~/.bash_profile`
+- removes any old `pi-audio-cast-display.service`
+
+After reboot you should see only the cast UI on the touchscreen — no desktop.
+
+Verify / troubleshoot:
 
 ```bash
-systemctl get-default          # should say multi-user.target
-systemctl is-enabled lightdm   # should say disabled or not found
-sudo systemctl status pi-audio-cast-display.service
-```
-
-Check logs:
-
-```bash
-sudo journalctl -u pi-audio-cast-display.service -f
 ./scripts/diagnose_boot.sh
+systemctl get-default          # multi-user.target
 ```
 
-**Run manually** (on the Pi display):
+**Run manually** (over SSH, on the Pi display):
 
 ```bash
 cd /home/vinyl/Desktop/vinyl
-./scripts/start_app.sh
+DISPLAY=:0 ./scripts/start_app.sh   # if X already running
+# or start a fresh X session:
+startx
 ```
 
 **Restore the normal Pi desktop:**
