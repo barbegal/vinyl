@@ -30,6 +30,8 @@ The user runs the app on an **Adafruit 2.8" PiTFT** attached to the Pi:
 Xorg is configured to render to the PiTFT via fbdev (`/etc/X11/xorg.conf.d/99-pitft.conf`). Boot sets `FRAMEBUFFER=/dev/fb1` before `startx`.
 
 Plate buttons (after `setup_pitft_buttons.sh`): GPIO → keys — ↑ scroll, ↓ scroll, ← refresh, Enter select.
+On-screen hints align with the physical column (**left** at `rotate=270`, **right** at `rotate=90`).
+Set `PLATE_BUTTONS_SIDE=left|right` in `.env` to match your rotation.
 
 ### Secondary: mirror to Raspberry Pi Connect
 
@@ -79,9 +81,16 @@ Times use **kernel uptime** (`/proc/uptime`) — seconds since the kernel starte
 - **Cast list “useful”** (most speakers listed) — target **≤60s** (Pi 4), **≤45s** (Pi 5). Non-blocking; UI is already tappable.
 - **Compared to full desktop** — previously ~90–120s+ to a usable desktop; kiosk path is materially faster.
 
-Cast discovery and Wi‑Fi association run **after** the first paint and must not block the TFT (deferred via `root.after()` in `fullscreen_ui.run()`).
+Cast discovery and Wi‑Fi association run **after** the first paint and must not block the TFT.
+The main shell (speaker list + bars) appears immediately; the top subtitle shows phased status:
+`Starting…` → `Loading audio…` → `Wi‑Fi connecting…` → `Loading Cast…` → `Searching for speakers…`.
+Heavy imports (numpy, sounddevice, pychromecast) load in background threads.
 
 ### Measuring on the Pi
+
+Boot progress appears on the TFT by default (`VINYL_BOOT_DEBUG=1` in `.env`). Errors show in **red**
+(`ERR:` lines): stderr/tracebacks, missing `/dev/fb1`, Xorg `(EE)` lines, audio/Cast failures, and
+log tails from `~/.vinyl-xsession.log`. Set `VINYL_BOOT_DEBUG=0` to hide once boot is stable.
 
 After each boot, milestones are appended to `~/.vinyl-boot.log`:
 

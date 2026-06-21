@@ -1,46 +1,71 @@
 from __future__ import annotations
 
-import sys
+import os
 import traceback
+from pathlib import Path
 
-from src.config.settings import AppSettings
+
+def _boot_debug_enabled() -> bool:
+    raw = os.getenv("VINYL_BOOT_DEBUG", "1").strip().lower()
+    return raw not in {"0", "false", "no", "off"}
 
 
 def main() -> None:
-    try:
-        from src.display.fullscreen_ui import FullscreenApp
+    use_debug = _boot_debug_enabled()
+    root = None
+    debug = None
 
-        settings = AppSettings.from_env()
-        app = FullscreenApp(settings=settings)
-        app.run()
-    except Exception as exc:
-        traceback.print_exc()
-        _show_fatal_error(str(exc))
-        raise
-
-
-def _show_fatal_error(message: str) -> None:
     try:
         import tkinter as tk
 
+        from src.boot_debug_ui import BootDebugPanel, attach_boot_logging
+
         root = tk.Tk()
-        root.title("Vinyl — error")
-        root.configure(bg="#12161f")
-        root.geometry("320x240")
-        root.attributes("-fullscreen", True)
-        tk.Label(
-            root,
-            text=f"Startup failed:\n{message}",
-            fg="#e07b7b",
-            bg="#12161f",
-            font=("DejaVu Sans", 9),
-            wraplength=300,
-            justify="left",
-        ).pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
-        root.update()
-        root.mainloop()
+        if use_debug:
+            debug = BootDebugPanel(root)
+            attach_boot_logging(debug)
+            debug.log("Python started")
+            debug.log_env()
+            debug.log_xorg_errors()
+
+        from src.config.settings import AppSettings
+
+        if debug:
+            debug.log("Loading settings…")
+
+        settings = AppSettings.from_env()
+
+        if debug:
+            debug.log("Opening main UI shell…")
+
+        from src.display.fullscreen_ui import FullscreenApp
+
+        app = FullscreenApp(
+            settings=settings,
+            root=root,
+            boot_debug=debug,
+        )
+        app.run()
     except Exception:
-        pass
+        traceback.print_exc()
+        message = traceback.format_exc()
+        if debug is not None:
+            debug.show_fatal(message)
+        else:
+            _show_fatal_error(message)
+        return
+
+
+def _show_fatal_error(message: str) -> None:
+    from src.boot_debug_ui import show_error_screen
+
+    show_error_screen(
+        message=message,
+        log_paths=(
+            Path.home() / ".vinyl-xsession.log",
+            Path.home() / ".vinyl-boot.log",
+        ),
+    )
 
 
 if __name__ == "__main__":

@@ -79,6 +79,7 @@ if [ "\$(tty 2>/dev/null)" = "/dev/tty1" ] \\
    && [ -z "\${DISPLAY:-}" ] \\
    && [ "\$(id -un)" = "$APP_USER" ] \\
    && [ -f "$APP_DIR/scripts/start_app.sh" ]; then
+  printf '\nVinyl kiosk\nStarting X on PiTFT…\n' > /dev/tty1 2>/dev/null || true
   # PiTFT is an SPI framebuffer; tell Xorg to render to it.
   [ -e /dev/fb1 ] && export FRAMEBUFFER=/dev/fb1
   exec startx

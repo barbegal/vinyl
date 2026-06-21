@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 import tkinter as tk
+from typing import TYPE_CHECKING, Optional
 
 from src.boot_timing import log_milestone
-from src.audio.input_listener import AudioInputListener
-from src.cast.group_discovery import CastGroupDiscovery, CastTarget
-from src.cast.stream_controller import ChromecastStreamController
 from src.config.settings import AppSettings
 from src.display.bars_widget import AudioBarsWidget
 from src.display.material_widgets import (
@@ -19,33 +17,36 @@ from src.display.material_widgets import (
     material_font,
 )
 
+if TYPE_CHECKING:
+    from src.audio.input_listener import AudioInputListener
+    from src.boot_debug_ui import BootDebugPanel
+    from src.cast.group_discovery import CastGroupDiscovery, CastTarget
+    from src.cast.stream_controller import ChromecastStreamController
+
 
 class FullscreenApp:
-    def __init__(self, settings: AppSettings) -> None:
+    def __init__(
+        self,
+        settings: AppSettings,
+        root: Optional[tk.Tk] = None,
+        boot_debug: Optional["BootDebugPanel"] = None,
+    ) -> None:
         self.settings = settings
         self._screen_w = settings.screen_width
         self._screen_h = settings.screen_height
         self._list_width = self._screen_w // 2
 
-        self.root = tk.Tk()
-        self.root.title("Pi Audio Cast Display")
-        self.root.configure(bg="#0a0c12")
-        self.root.geometry(f"{self._screen_w}x{self._screen_h}")
-        if settings.fullscreen:
-            self.root.attributes("-fullscreen", True)
+        self.root = root or tk.Tk()
+        if root is None:
+            self.root.title("Pi Audio Cast Display")
+            self.root.configure(bg="#0a0c12")
+            self.root.geometry(f"{self._screen_w}x{self._screen_h}")
+            if settings.fullscreen:
+                self.root.attributes("-fullscreen", True)
 
-        self.listener = AudioInputListener(
-            sample_rate=settings.sample_rate,
-            channels=settings.channels,
-            block_size=settings.block_size,
-            preferred_device_name=settings.input_device_name,
-        )
-        self.discovery = CastGroupDiscovery(
-            groups_only=settings.groups_only,
-            discovery_timeout=settings.cast_discovery_timeout,
-            known_hosts=settings.cast_known_hosts,
-        )
-        self.controller = ChromecastStreamController(settings=settings)
+        self.listener: Optional[AudioInputListener] = None
+        self.discovery: Optional[CastGroupDiscovery] = None
+        self.controller: Optional[ChromecastStreamController] = None
         self.targets: list[CastTarget] = []
         self._target_buttons: list[MaterialButton] = []
         self._active_uuid: str | None = None
@@ -57,17 +58,91 @@ class FullscreenApp:
         self.subtitle_var = tk.StringVar(value="Searching for speakers…")
         self._header_h = 34
         self._top_btn_slot = 58
-        # Right-edge strip aligned with PiTFT plate buttons (5 slots; 4 labeled).
+        # Plate button hint strip — aligned with the physical shield column.
         self._hint_strip_w = 26
         self._plate_hint_slots = (0, 1, 3, 4)  # skip middle (unused Right)
         self._plate_hint_labels = ("↑", "↓", "↻", "OK")
+        self._plate_on_left = settings.plate_buttons_side == "left"
+
+        self._boot_debug = boot_debug
+        self._network_poll_id: str | None = None
+        self._startup_done = False
+
+        self.root.title("Pi Audio Cast Display")
+        self.root.configure(bg="#0a0c12")
 
         self._build_layout()
         self._bind_events()
+        self._show_main_ui()
         log_milestone("tk window built")
+
+    def _show_main_ui(self) -> None:
+        """Drop boot overlay and show the cast shell immediately."""
+        if self._boot_debug is not None:
+            self._boot_debug.log("Main UI visible")
+            self._boot_debug.detach()
+            self._boot_debug = None
+        self._set_subtitle("Starting…")
+        self.root.update_idletasks()
+        self.root.update()
+
+    def _ensure_audio(self) -> None:
+        if self.listener is not None:
+            return
+
+        from src.audio.input_listener import AudioInputListener
+
+        self.listener = AudioInputListener(
+            sample_rate=self.settings.sample_rate,
+            channels=self.settings.channels,
+            block_size=self.settings.block_size,
+            preferred_device_name=self.settings.input_device_name,
+        )
+
+    def _ensure_cast(self) -> None:
+        if self.discovery is not None and self.controller is not None:
+            return
+
+        from src.cast.group_discovery import CastGroupDiscovery
+        from src.cast.stream_controller import ChromecastStreamController
+
+        if self.discovery is None:
+            self.discovery = CastGroupDiscovery(
+                groups_only=self.settings.groups_only,
+                discovery_timeout=self.settings.cast_discovery_timeout,
+                known_hosts=self.settings.cast_known_hosts,
+            )
+        if self.controller is None:
+            self.controller = ChromecastStreamController(settings=self.settings)
+
+    def _ensure_cast_stack(self) -> None:
+        self._ensure_audio()
+        self._ensure_cast()
+
+    def _content_layout(self) -> dict[str, int]:
+        """Speaker list, bars, and plate hints — mirrored when buttons are on the left."""
+        hint_w = self._hint_strip_w
+        list_w = self._list_width
+        bars_w = self._screen_w - list_w - hint_w
+        if self._plate_on_left:
+            return {
+                "hint_x": 0,
+                "bars_x": hint_w,
+                "bars_w": bars_w,
+                "list_x": hint_w + bars_w,
+                "list_w": list_w,
+            }
+        return {
+            "hint_x": self._screen_w - hint_w,
+            "bars_x": list_w,
+            "bars_w": bars_w,
+            "list_x": 0,
+            "list_w": list_w,
+        }
 
     def _build_layout(self) -> None:
         content_h = self._screen_h - self._header_h
+        layout = self._content_layout()
 
         self.top_bar = tk.Frame(
             self.root,
@@ -114,35 +189,42 @@ class FullscreenApp:
         )
         self.exit_btn.place(x=self._screen_w - 30, y=4)
 
-        self.left_panel = tk.Frame(
+        self.list_panel = tk.Frame(
             self.root,
             bg=PANEL_BG,
-            width=self._list_width,
+            width=layout["list_w"],
             height=content_h,
             highlightthickness=0,
         )
-        self.left_panel.place(x=0, y=self._header_h, width=self._list_width, height=content_h)
-        self.left_panel.pack_propagate(False)
+        self.list_panel.place(
+            x=layout["list_x"],
+            y=self._header_h,
+            width=layout["list_w"],
+            height=content_h,
+        )
+        self.list_panel.pack_propagate(False)
 
-        self.targets_frame = tk.Frame(self.left_panel, bg=PANEL_BG)
+        self.targets_frame = tk.Frame(self.list_panel, bg=PANEL_BG)
         self.targets_frame.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
 
-        bars_w = self._screen_w - self._list_width - self._hint_strip_w
-        self.bars = AudioBarsWidget(self.root, width=bars_w, height=content_h)
+        self.bars = AudioBarsWidget(
+            self.root,
+            width=layout["bars_w"],
+            height=content_h,
+        )
         self.bars.place(
-            x=self._list_width,
+            x=layout["bars_x"],
             y=self._header_h,
-            width=bars_w,
+            width=layout["bars_w"],
             height=content_h,
         )
 
-        self._build_plate_button_hints(content_h)
+        self._build_plate_button_hints(content_h, layout["hint_x"])
 
-    def _build_plate_button_hints(self, content_h: int) -> None:
-        """Labels on the right edge, aligned with the physical plate button column."""
+    def _build_plate_button_hints(self, content_h: int, hint_x: int) -> None:
+        """Labels along the plate button column (left or right per rotation)."""
         hint_font = material_font(11, weight="bold")
         slot_count = 5  # Adafruit plate: 5 buttons top-to-bottom
-        x = self._screen_w - self._hint_strip_w
         slot_h = content_h / slot_count
 
         for slot, label in zip(self._plate_hint_slots, self._plate_hint_labels):
@@ -155,7 +237,12 @@ class FullscreenApp:
                 font=hint_font,
                 width=2,
                 anchor="center",
-            ).place(x=x, y=y, width=self._hint_strip_w, height=int(slot_h))
+            ).place(
+                x=hint_x,
+                y=y,
+                width=self._hint_strip_w,
+                height=int(slot_h),
+            )
 
     def _bind_events(self) -> None:
         self.root.bind("<Escape>", lambda _e: self.shutdown())
@@ -203,6 +290,8 @@ class FullscreenApp:
     def _on_target_tap(self, index: int) -> None:
         if index >= len(self.targets):
             return
+
+        self._ensure_cast_stack()
 
         tapped_uuid = self.targets[index].uuid
         if self._active_uuid is not None and tapped_uuid == self._active_uuid:
@@ -263,7 +352,11 @@ class FullscreenApp:
         return None
 
     def _update_status_text(self) -> None:
-        if self.discovery.last_error and not self.targets:
+        if (
+            self.discovery is not None
+            and self.discovery.last_error
+            and not self.targets
+        ):
             self._set_subtitle(self.discovery.last_error, ERROR)
             return
         active_name = self._active_target_name()
@@ -275,6 +368,13 @@ class FullscreenApp:
             self._set_subtitle("Searching for speakers…")
 
     def refresh_targets(self, announce: bool = True) -> None:
+        from src.network_status import is_lan_ready, network_status_line
+
+        if not is_lan_ready():
+            self._set_subtitle(network_status_line())
+            return
+
+        self._ensure_cast()
         if announce:
             self._set_subtitle("Scanning…")
 
@@ -307,6 +407,7 @@ class FullscreenApp:
         if index >= len(self.targets):
             return
 
+        self._ensure_cast_stack()
         self._set_subtitle("Connecting...")
         self.root.update_idletasks()
 
@@ -328,7 +429,8 @@ class FullscreenApp:
             self._set_subtitle(status.message, ERROR)
 
     def stop_cast(self) -> None:
-        self.controller.stop_stream()
+        if self.controller is not None:
+            self.controller.stop_stream()
         self._active_uuid = None
         self._apply_target_styles()
         if self.targets:
@@ -337,46 +439,172 @@ class FullscreenApp:
             self._set_subtitle("Stopped")
 
     def _update_audio_ui(self) -> None:
-        snapshot = self.listener.get_latest_snapshot()
+        rms_linear = 0.0
+        peak_linear = 0.0
+        if self.listener is not None:
+            snapshot = self.listener.get_latest_snapshot()
+            rms_linear = snapshot.levels.rms_linear
+            peak_linear = snapshot.levels.peak_linear
         self.bars.update_levels(
-            rms_linear=snapshot.levels.rms_linear,
-            peak_linear=snapshot.levels.peak_linear,
+            rms_linear=rms_linear,
+            peak_linear=peak_linear,
         )
         self.root.after(80, self._update_audio_ui)
 
     def run(self) -> None:
-        # Paint the window before network/audio work — otherwise the TFT stays black
-        # until mainloop() runs (discovery used to block here).
-        self.root.update_idletasks()
-        self.root.update()
         log_milestone("ui visible on tft")
-
         self._update_audio_ui()
-        self.root.after(50, self._startup)
+        self.root.after(50, self._begin_background_startup)
         self.root.mainloop()
 
-    def _startup(self) -> None:
-        input_ok = self.listener.start()
-        log_milestone(
-            "audio input ready" if input_ok else "audio input unavailable"
-        )
-        if not input_ok and not self.listener.last_error:
-            self._set_subtitle("No audio input", ERROR)
+    def _begin_background_startup(self) -> None:
+        import threading
 
-        self.refresh_targets(announce=False)
-        log_milestone(
-            f"first cast scan ({len(self.targets)} target(s))"
+        self._set_subtitle("Loading audio…")
+        threading.Thread(target=self._load_audio_worker, daemon=True).start()
+
+    def _load_audio_worker(self) -> None:
+        try:
+            self._ensure_audio()
+            input_ok = self.listener.start()
+            error = self.listener.last_error
+        except Exception as exc:
+            input_ok = False
+            error = str(exc)
+
+        self.root.after(
+            0,
+            lambda: self._audio_startup_done(input_ok, error),
         )
+
+    def _audio_startup_done(
+        self,
+        input_ok: bool,
+        error: str | None,
+    ) -> None:
+        if error:
+            self._set_subtitle(error, ERROR)
+            log_milestone(f"audio err: {error}")
+        elif not input_ok:
+            self._set_subtitle("No audio input", ERROR)
+            log_milestone("audio input unavailable")
+        else:
+            log_milestone("audio input ready")
+
+        self._poll_network(0)
+
+    def _poll_network(self, attempt: int) -> None:
+        from src.network_status import is_lan_ready, network_status_line
+
+        if self._network_poll_id is not None:
+            try:
+                self.root.after_cancel(self._network_poll_id)
+            except Exception:
+                pass
+            self._network_poll_id = None
+
+        if is_lan_ready():
+            self._set_subtitle("Loading Cast…")
+            import threading
+
+            threading.Thread(target=self._load_cast_worker, daemon=True).start()
+            return
+
+        self._set_subtitle(network_status_line())
+        if attempt >= 120:
+            self._set_subtitle("No network — check Wi‑Fi", ERROR)
+            log_milestone("network timeout")
+            self._schedule_network_retry()
+            return
+
+        self._network_poll_id = self.root.after(
+            1000,
+            lambda: self._poll_network(attempt + 1),
+        )
+
+    def _schedule_network_retry(self) -> None:
+        if self._auto_after_id is not None:
+            try:
+                self.root.after_cancel(self._auto_after_id)
+            except Exception:
+                pass
+        self._auto_after_id = self.root.after(
+            self._refresh_ms,
+            self._retry_network_and_cast,
+        )
+
+    def _retry_network_and_cast(self) -> None:
+        from src.network_status import is_lan_ready
+
+        if is_lan_ready() and not self._startup_done:
+            self._set_subtitle("Loading Cast…")
+            import threading
+
+            threading.Thread(target=self._load_cast_worker, daemon=True).start()
+        else:
+            self._auto_after_id = self.root.after(
+                self._refresh_ms,
+                self._retry_network_and_cast,
+            )
+
+    def _load_cast_worker(self) -> None:
+        try:
+            self._ensure_cast()
+            targets = self.discovery.discover()
+            error = self.discovery.last_error
+        except Exception as exc:
+            targets = []
+            error = str(exc)
+
+        self.root.after(
+            0,
+            lambda: self._cast_startup_done(targets, error),
+        )
+
+    def _cast_startup_done(
+        self,
+        targets: list["CastTarget"],
+        error: str | None,
+    ) -> None:
+        self.targets = targets
+        signature = self._signature(self.targets)
+
+        if signature != self._targets_signature:
+            self._targets_signature = signature
+            self._rebuild_target_buttons()
+            if self.targets:
+                if self._focus_index is None or self._focus_index >= len(self.targets):
+                    self._focus_index = 0
+            else:
+                self._focus_index = None
+
+        if error:
+            self._set_subtitle(error, ERROR)
+            log_milestone(f"cast err: {error}")
+        else:
+            log_milestone(f"first cast scan ({len(self.targets)} target(s))")
+
+        self._update_status_text()
+        self._startup_done = True
         self._auto_after_id = self.root.after(self._refresh_ms, self._auto_refresh)
 
     def shutdown(self) -> None:
+        if self._network_poll_id is not None:
+            try:
+                self.root.after_cancel(self._network_poll_id)
+            except Exception:
+                pass
+            self._network_poll_id = None
         if self._auto_after_id is not None:
             try:
                 self.root.after_cancel(self._auto_after_id)
             except Exception:
                 pass
             self._auto_after_id = None
-        self.controller.stop_stream()
-        self.listener.stop()
-        self.discovery.shutdown()
+        if self.controller is not None:
+            self.controller.stop_stream()
+        if self.listener is not None:
+            self.listener.stop()
+        if self.discovery is not None:
+            self.discovery.shutdown()
         self.root.destroy()

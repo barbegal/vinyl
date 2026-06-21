@@ -12,9 +12,10 @@ W, H = 320, 240
 LIST_W = W // 2
 HEADER_H = 34
 HINT_STRIP_W = 26
-BARS_X = LIST_W
+HINT_X = 0  # plate buttons on left (270° rotation)
+BARS_X = HINT_STRIP_W
 BARS_W = W - LIST_W - HINT_STRIP_W
-HINT_X = W - HINT_STRIP_W
+LIST_X = HINT_STRIP_W + BARS_W
 CONTENT_H = H - HEADER_H
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "screenshots"
@@ -111,12 +112,12 @@ class ScreenRenderer:
         _centered_text(self.draw, (x, y, x + size, y + size), label, ICON_FG, pick_font(11, bold=True))
 
     def _draw_plate_hints(self) -> None:
-        self.draw.rectangle((HINT_X, HEADER_H, W, H), fill=PANEL_BG)
+        self.draw.rectangle((HINT_X, HEADER_H, HINT_X + HINT_STRIP_W, H), fill=PANEL_BG)
         slot_h = CONTENT_H / PLATE_SLOT_COUNT
         hint_font = pick_font(11, bold=True)
         for slot, label in zip(PLATE_HINT_SLOTS, PLATE_HINT_LABELS):
             y = HEADER_H + int(slot * slot_h)
-            box = (HINT_X, y, W, y + int(slot_h))
+            box = (HINT_X, y, HINT_X + HINT_STRIP_W, y + int(slot_h))
             _centered_text(self.draw, box, label, SUBTITLE_FG, hint_font)
 
     def _draw_bars_right(self, levels: list[float]) -> None:
@@ -154,7 +155,7 @@ class ScreenRenderer:
         focus_index: int | None = None,
         empty_message: str | None = None,
     ) -> None:
-        self.draw.rectangle((0, HEADER_H, LIST_W, H), fill=PANEL_BG)
+        self.draw.rectangle((LIST_X, HEADER_H, W, H), fill=PANEL_BG)
         list_top = HEADER_H + 4
         list_bottom = H - 4
         list_h = list_bottom - list_top
@@ -171,7 +172,7 @@ class ScreenRenderer:
                     bg, fg = TARGET_ACTIVE_BG, TARGET_ACTIVE_FG
                 else:
                     bg, fg = SURFACE, TARGET_FG
-                box = (4, row_y, LIST_W - 4, row_y + row_h)
+                box = (LIST_X + 4, row_y, W - 4, row_y + row_h)
                 _rounded(self.draw, box, BTN_RADIUS, bg)
                 _centered_text(self.draw, box, label, fg, pick_font(10, bold=True))
                 if is_focused:
@@ -182,7 +183,7 @@ class ScreenRenderer:
                         width=2,
                     )
         elif empty_message:
-            box = (4, list_top, LIST_W - 4, list_top + 24)
+            box = (LIST_X + 4, list_top, W - 4, list_top + 24)
             _centered_text(self.draw, box, empty_message, EMPTY_FG, pick_font(9, bold=True))
 
     def split_layout(

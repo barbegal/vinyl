@@ -80,10 +80,11 @@ The installer:
 After reboot you should see only the cast UI on the touchscreen — no desktop.
 
 **How long should boot take?** With desktop disabled, expect a blank TFT for the first ~20–30s
-(kernel/systemd). The cast UI should appear in about **30–45s on a Pi 4** or **22–35s on a Pi 5**
-(power → interactive touchscreen). The speaker list keeps filling for another **6–20s** via
-auto-refresh — that does not block the UI. Milestones are logged to `~/.vinyl-boot.log`; run
-`./scripts/diagnose_boot.sh` to review them.
+(kernel/systemd). Before X starts you may see brief **console text** on the TFT (`Vinyl kiosk /
+Starting X on PiTFT…`). Once X is up, a **boot debug panel** lists each startup step until the
+main UI appears (~30–45s on Pi 4, ~22–35s on Pi 5). Set `VINYL_BOOT_DEBUG=0` in `.env` to hide
+it. The speaker list keeps filling for another **6–20s** via auto-refresh. Milestones are logged
+to `~/.vinyl-boot.log`; run `./scripts/diagnose_boot.sh` to review them.
 
 ### Adafruit 2.8" PiTFT notes (capacitive 28c / resistive 28r)
 

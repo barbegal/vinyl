@@ -4,35 +4,22 @@
 from __future__ import annotations
 
 import sys
-import tkinter as tk
 from pathlib import Path
+
+from src.boot_debug_ui import show_error_screen
 
 
 def main() -> None:
-    lines = []
-    if len(sys.argv) > 1:
-        lines.append(sys.argv[1])
-    log = Path.home() / ".vinyl-xsession.log"
-    if log.is_file():
-        lines.append(log.read_text(encoding="utf-8", errors="replace")[-1800:])
-    text = "\n".join(lines).strip() or "App failed to start.\nSee ~/.vinyl-xsession.log"
-
-    root = tk.Tk()
-    root.title("Vinyl — error")
-    root.configure(bg="#12161f")
-    root.geometry("320x240")
-    root.attributes("-fullscreen", True)
-    tk.Label(
-        root,
-        text=text,
-        fg="#e07b7b",
-        bg="#12161f",
-        font=("DejaVu Sans", 8),
-        wraplength=310,
-        justify="left",
-        anchor="nw",
-    ).pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
-    root.mainloop()
+    extra = sys.argv[1] if len(sys.argv) > 1 else ""
+    home = Path.home()
+    show_error_screen(
+        message=extra,
+        log_paths=(
+            home / ".vinyl-xsession.log",
+            home / ".vinyl-boot.log",
+            home / ".local/share/xorg/Xorg.0.log",
+        ),
+    )
 
 
 if __name__ == "__main__":

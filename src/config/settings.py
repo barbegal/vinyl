@@ -32,11 +32,15 @@ class AppSettings:
     cast_discovery_timeout: float = 12.0
     cast_refresh_interval: float = 6.0
     cast_known_hosts: list[str] = field(default_factory=list)
+    plate_buttons_side: str = "left"
 
     @classmethod
     def from_env(cls) -> "AppSettings":
         known_raw = os.getenv("CAST_KNOWN_HOSTS", "").strip()
         known_hosts = [h.strip() for h in known_raw.split(",") if h.strip()]
+        plate_side = os.getenv("PLATE_BUTTONS_SIDE", "left").strip().lower()
+        if plate_side not in {"left", "right"}:
+            plate_side = "left"
         return cls(
             screen_width=int(os.getenv("SCREEN_WIDTH", "320")),
             screen_height=int(os.getenv("SCREEN_HEIGHT", "240")),
@@ -54,4 +58,5 @@ class AppSettings:
             cast_discovery_timeout=float(os.getenv("CAST_DISCOVERY_TIMEOUT", "12")),
             cast_refresh_interval=float(os.getenv("CAST_REFRESH_INTERVAL", "6")),
             cast_known_hosts=known_hosts,
+            plate_buttons_side=plate_side,
         )
