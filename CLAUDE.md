@@ -121,24 +121,22 @@ Example log:
 
 If `ui visible on tft` exceeds the SLO, check: slow SD card, extra `systemd` units, Wi‑Fi driver delay, Xorg errors, or Python import time (venv on SD).
 
-## Key scripts
+## Key scripts (Pi)
 
-| Script | Purpose |
-|--------|---------|
-| `scripts/install_service.sh` | Full kiosk install (name is legacy — no systemd app unit) |
-| `scripts/setup_pitft.sh` | Overlay, fbdev X, evdev touch, splash off |
-| `scripts/setup_pitft_buttons.sh` | GPIO plate buttons |
-| `scripts/setup_rpconnect.sh` | Remote mirror: x11vnc on `:0` + enable rpi-connect |
-| `scripts/enable_fast_boot.sh` | Desktop off, autologin, profile.d, calls setup_pitft |
-| `scripts/fix_ssh.sh` | SSH broken after boot edits — fixes profile guards + sshd |
-| `scripts/recover.sh` | **Run this when broken** — chmod, SSH, refresh xinitrc, .env |
-| `scripts/flip_display.sh` | Toggle rotation 90 ↔ 270 |
-| `scripts/diagnose_boot.sh` | Boot/display/runtime checks |
-| `scripts/detect_touch.sh` | I²C scan for FT6206 at 0x38 |
-| `scripts/discover_cast.py` | Standalone Cast mDNS scan |
-| `scripts/generate_mockups.py` | Regenerate `screenshots/` PNGs |
+| Script | When to use |
+|--------|-------------|
+| **`recover.sh`** | Broken boot / black TFT / after `git pull` (`--display` for panel fix) |
+| **`diagnose_boot.sh`** | Health check (`--report` → paste `~/.vinyl-report.txt`) |
+| **`install_service.sh`** | First-time kiosk install |
+| **`restore_desktop.sh`** | Undo kiosk → normal Pi desktop |
+| **`setup_pitft.sh`** | Panel overlay + Xorg (`270 28r` or `28c`) |
+| **`detect_touch.sh`** | Capacitive vs resistive panel |
+| **`setup_rpconnect.sh`** | Optional remote TFT mirror (x11vnc) |
+| **`discover_cast.py`** | Test Cast discovery only |
 
-Pi recovery one-liner after pull:
+Internal / dev: `kiosk_xinitrc.sh` (template), `boot_milestone.sh`, `generate_mockups.py`, `flip_display.sh` (calls `setup_pitft.sh`).
+
+Pi recovery after pull:
 
 ```bash
 cd /home/vinyl/Desktop/vinyl && git pull && bash scripts/recover.sh && sudo reboot

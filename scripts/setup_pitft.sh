@@ -82,10 +82,10 @@ if [[ -n "$CONFIG_TXT" ]]; then
     echo "  added dtparam=i2c_arm=on"
   fi
   if grep -qE '^disable_splash=' "$CONFIG_TXT"; then
-    sed -i 's/^disable_splash=.*/disable_splash=1/' "$CONFIG_TXT"
-  else
-    echo 'disable_splash=1' >>"$CONFIG_TXT"
+    sed -i '/^disable_splash=/d' "$CONFIG_TXT"
   fi
+  echo 'disable_splash=1' >>"$CONFIG_TXT"
+  echo "  set disable_splash=1 (deduped)"
 else
   echo "  WARNING: config.txt not found on /boot"
 fi

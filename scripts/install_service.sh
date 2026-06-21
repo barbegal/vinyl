@@ -28,23 +28,8 @@ if [[ ! -x "$APP_DIR/.venv/bin/python" ]]; then
   exit 1
 fi
 
-chmod +x "$APP_DIR/scripts/start_app.sh" \
-         "$APP_DIR/scripts/enable_fast_boot.sh" \
-         "$APP_DIR/scripts/restore_desktop.sh" \
-         "$APP_DIR/scripts/diagnose_boot.sh" \
-         "$APP_DIR/scripts/setup_pitft.sh" \
-         "$APP_DIR/scripts/detect_touch.sh" \
-         "$APP_DIR/scripts/recover_display.sh" \
-         "$APP_DIR/scripts/recover.sh" \
-         "$APP_DIR/scripts/fix_black_tft.sh" \
-         "$APP_DIR/scripts/fix_ssh.sh" \
-         "$APP_DIR/scripts/refresh_xinitrc.sh" \
-         "$APP_DIR/scripts/flip_display.sh" \
-         "$APP_DIR/scripts/setup_pitft_buttons.sh" \
-         "$APP_DIR/scripts/setup_rpconnect.sh" \
-         "$APP_DIR/scripts/show_boot_error.py" \
-         "$APP_DIR/scripts/boot_milestone.sh" \
-         "$APP_DIR/scripts/kiosk_xinitrc.sh"
+chmod +x "$APP_DIR/scripts/"*.sh
+chmod +x "$APP_DIR/scripts/show_boot_error.py" 2>/dev/null || true
 
 echo "=== Removing any old systemd unit ==="
 sudo systemctl disable --now pi-audio-cast-display.service 2>/dev/null || true

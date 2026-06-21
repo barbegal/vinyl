@@ -88,15 +88,17 @@ bash scripts/recover.sh
 sudo reboot
 ```
 
-**SSH stopped working?** Usually a boot/profile edit ran `exec startx` on SSH login. On the Pi (keyboard/HDMI or an existing session):
+**SSH stopped working?** `recover.sh` fixes SSH-safe login hooks and re-enables `sshd`:
 
 ```bash
 cd /home/vinyl/Desktop/vinyl
 git pull
-bash scripts/fix_ssh.sh
+bash scripts/recover.sh
 ```
 
-If you cannot log in at all, mount the SD card on another computer and create an empty file `ssh` in the `boot` or `boot/firmware` partition, then boot the Pi and run `fix_ssh.sh`.
+If you cannot log in at all, mount the SD card on another computer and create an empty file `ssh` in the `boot` or `boot/firmware` partition, then boot the Pi and run `recover.sh`.
+
+**Black TFT but app runs?** Also run: `bash scripts/recover.sh --display` (then reboot).
 
 **How long should boot take?** With desktop disabled, expect a blank TFT for the first ~20–30s
 (kernel/systemd). Before X starts you may see brief **console text** on the TFT (`Vinyl kiosk /
@@ -204,6 +206,8 @@ VINYL_VNC_PASSWORD=yourpass   # recommended when exposed on the LAN
 ```
 
 Check status (rp connect / vnc section): `./scripts/diagnose_boot.sh`. Mirror log: `~/.vinyl-vnc.log`.
+
+**Paste diagnostics for help:** `bash scripts/diagnose_boot.sh --report` → `~/.vinyl-report.txt`
 
 ## Generate UI screenshots
 
