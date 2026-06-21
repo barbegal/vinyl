@@ -85,8 +85,8 @@ run_diagnosis() {
     fi
   done
   [[ -f /etc/X11/xorg.conf.d/99-pitft.conf ]] && echo "Xorg fbdev conf: present" || echo "Xorg fbdev conf: MISSING"
-  echo "kernel (pitft / fb):"
-  dmesg 2>/dev/null | grep -iE 'pitft|fb1|stmpe|fbtft|spi0' | tail -8 | sed 's/^/  /' || echo "  (run: sudo dmesg | grep -i pitft)"
+  echo "kernel (pitft / fb / bind):"
+  dmesg 2>/dev/null | grep -iE 'pitft|fb1|stmpe|fbtft|spi0|gpio-key|bind|pinctrl|cannot claim' | tail -12 | sed 's/^/  /' || echo "  (run: sudo dmesg | grep -iE 'bind|gpio|pitft')"
 
   echo ""
   echo "=== runtime ==="

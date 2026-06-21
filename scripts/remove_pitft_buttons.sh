@@ -31,5 +31,9 @@ sed -i '/^dtoverlay=gpio-key,gpio=25,.*label=pitft-/d' "$CONFIG_TXT"
 sed -i '/^dtoverlay=gpio-key,.*label=pitft-/d' "$CONFIG_TXT"
 
 remaining="$(grep -c '^dtoverlay=gpio-key,' "$CONFIG_TXT" 2>/dev/null || echo 0)"
-echo "  remaining gpio-key lines: $remaining (other overlays, if any)"
+if [[ "$remaining" -gt 0 ]]; then
+  echo "  removing $remaining remaining gpio-key line(s)"
+  sed -i '/^dtoverlay=gpio-key,/d' "$CONFIG_TXT"
+fi
+echo "  gpio-key overlays left: $(grep -c '^dtoverlay=gpio-key,' "$CONFIG_TXT" 2>/dev/null || echo 0)"
 echo "Reboot to apply: sudo reboot"

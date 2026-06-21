@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # One-shot recovery: permissions, SSH-safe login hooks, xinitrc, .env.
 #   bash scripts/recover.sh              — usual fix after git pull
-#   bash scripts/recover.sh --strip-buttons  — remove gpio-key overlays (kernel bind fix)
+#   bash scripts/recover.sh --repair-config [rotation] [28r|28c] — nuclear config.txt fix
 #   bash scripts/recover.sh --display 270 28c
 set -euo pipefail
 
@@ -12,6 +12,7 @@ USER_HOME="${HOME}"
 
 DISPLAY_FIX=0
 STRIP_BUTTONS=0
+REPAIR_CONFIG=0
 ROTATE=270
 PANEL=28r
 
@@ -21,7 +22,8 @@ Usage: bash scripts/recover.sh [--display [rotation] [28c|28r]]
 
   default     chmod scripts, SSH-safe profile guards, refresh ~/.xinitrc, .env
   --display   also remove ,drm from overlay and re-run setup_pitft (needs sudo)
-  --strip-buttons  remove plate gpio-key overlays only (kernel bind errors)
+  --strip-buttons  remove plate gpio-key overlays only
+  --repair-config  strip ALL gpio-key + duplicate pitft; write one clean block (bind errors)
 
 Then: sudo reboot
 Desktop undo: sudo ./scripts/restore_desktop.sh
@@ -40,6 +42,12 @@ while [[ $# -gt 0 ]]; do
     --strip-buttons)
       STRIP_BUTTONS=1
       shift
+      ;;
+    --repair-config)
+      REPAIR_CONFIG=1
+      shift
+      [[ $# -gt 0 && "$1" =~ ^[0-9]+$ ]] && { ROTATE="$1"; shift; }
+      [[ $# -gt 0 && "$1" =~ ^28[cr]$ ]] && { PANEL="$1"; shift; }
       ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1"; usage; exit 1 ;;
@@ -100,6 +108,12 @@ if command -v systemctl >/dev/null 2>&1; then
     fi
   done
   echo "  IP: $(hostname -I 2>/dev/null | tr ' ' '\n' | grep -v '^$' | head -3 | tr '\n' ' ')"
+fi
+
+if [[ "$REPAIR_CONFIG" -eq 1 ]]; then
+  echo ""
+  echo "=== repair config.txt (rotate=${ROTATE} panel=${PANEL}) ==="
+  sudo bash "$APP_DIR/scripts/repair_pitft_config.sh" "$ROTATE" "$PANEL"
 fi
 
 if [[ "$DISPLAY_FIX" -eq 1 ]]; then
