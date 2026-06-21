@@ -11,6 +11,11 @@ from PIL import Image, ImageDraw, ImageFont
 W, H = 320, 240
 LIST_W = W // 2
 HEADER_H = 34
+HINT_STRIP_W = 26
+BARS_X = LIST_W
+BARS_W = W - LIST_W - HINT_STRIP_W
+HINT_X = W - HINT_STRIP_W
+CONTENT_H = H - HEADER_H
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "screenshots"
 OUT.mkdir(parents=True, exist_ok=True)
@@ -24,12 +29,17 @@ SURFACE = "#1a2030"
 TARGET_FG = "#eef2f8"
 TARGET_ACTIVE_BG = "#2d6b4a"
 TARGET_ACTIVE_FG = "#f2fff6"
+FOCUS_OUTLINE = "#6ecf94"
 ERROR_FG = "#e07b7b"
 OK_FG = "#6ecf94"
 EMPTY_FG = "#6b7a90"
 BTN_RADIUS = 10
 ICON_BTN_RADIUS = 8
 TOP_BTN_SLOT = 58
+
+PLATE_HINT_SLOTS = (0, 1, 3, 4)
+PLATE_HINT_LABELS = ("↑", "↓", "↻", "OK")
+PLATE_SLOT_COUNT = 5
 
 
 def pick_font(size: int = 14, bold: bool = False):
@@ -100,22 +110,30 @@ class ScreenRenderer:
         _rounded(self.draw, (x, y, x + size, y + size), ICON_BTN_RADIUS, fill)
         _centered_text(self.draw, (x, y, x + size, y + size), label, ICON_FG, pick_font(11, bold=True))
 
+    def _draw_plate_hints(self) -> None:
+        self.draw.rectangle((HINT_X, HEADER_H, W, H), fill=PANEL_BG)
+        slot_h = CONTENT_H / PLATE_SLOT_COUNT
+        hint_font = pick_font(11, bold=True)
+        for slot, label in zip(PLATE_HINT_SLOTS, PLATE_HINT_LABELS):
+            y = HEADER_H + int(slot * slot_h)
+            box = (HINT_X, y, W, y + int(slot_h))
+            _centered_text(self.draw, box, label, SUBTITLE_FG, hint_font)
+
     def _draw_bars_right(self, levels: list[float]) -> None:
-        x0, bars_w = LIST_W, W - LIST_W
-        content_h = H - HEADER_H
+        content_h = CONTENT_H
         top, bottom = GRAD_TOP, GRAD_BOTTOM
         for y in range(HEADER_H, H):
             t = (y - HEADER_H) / max(content_h - 1, 1)
             r = int(top[0] + (bottom[0] - top[0]) * t)
             g = int(top[1] + (bottom[1] - top[1]) * t)
             b = int(top[2] + (bottom[2] - top[2]) * t)
-            self.draw.line((x0, y, W, y), fill=(r, g, b))
+            self.draw.line((BARS_X, y, BARS_X + BARS_W, y), fill=(r, g, b))
 
         bars = 16
         gap = 2
         margin_x = 6
         margin_bottom = 12
-        draw_width = bars_w - margin_x * 2
+        draw_width = BARS_W - margin_x * 2
         total_gap = gap * (bars + 1)
         bar_width = max(2, (draw_width - total_gap) // bars)
         max_bar_height = content_h - margin_bottom - 8
@@ -123,7 +141,7 @@ class ScreenRenderer:
         for index, value in enumerate(levels[:bars]):
             value = max(0.0, min(1.0, value))
             bar_height = max(2 if value > 0 else 0, int(max_bar_height * value))
-            bx0 = x0 + margin_x + gap + index * (bar_width + gap)
+            bx0 = BARS_X + margin_x + gap + index * (bar_width + gap)
             by0 = H - margin_bottom - bar_height
             bx1 = bx0 + bar_width
             by1 = H - margin_bottom
@@ -133,6 +151,7 @@ class ScreenRenderer:
         self,
         targets: list[tuple[str, bool]] | None = None,
         active_index: int | None = None,
+        focus_index: int | None = None,
         empty_message: str | None = None,
     ) -> None:
         self.draw.rectangle((0, HEADER_H, LIST_W, H), fill=PANEL_BG)
@@ -146,13 +165,22 @@ class ScreenRenderer:
             for idx, (name, is_group) in enumerate(targets):
                 label = f"{name}  ·  group" if is_group else name
                 row_y = list_top + idx * (row_h + gap)
-                if active_index == idx:
+                is_active = active_index == idx
+                is_focused = focus_index == idx and not is_active
+                if is_active:
                     bg, fg = TARGET_ACTIVE_BG, TARGET_ACTIVE_FG
                 else:
                     bg, fg = SURFACE, TARGET_FG
                 box = (4, row_y, LIST_W - 4, row_y + row_h)
                 _rounded(self.draw, box, BTN_RADIUS, bg)
                 _centered_text(self.draw, box, label, fg, pick_font(10, bold=True))
+                if is_focused:
+                    self.draw.rounded_rectangle(
+                        (box[0] + 1, box[1] + 1, box[2] - 1, box[3] - 1),
+                        radius=BTN_RADIUS,
+                        outline=FOCUS_OUTLINE,
+                        width=2,
+                    )
         elif empty_message:
             box = (4, list_top, LIST_W - 4, list_top + 24)
             _centered_text(self.draw, box, empty_message, EMPTY_FG, pick_font(9, bold=True))
@@ -164,11 +192,13 @@ class ScreenRenderer:
         subtitle_color: str = SUBTITLE_FG,
         targets: list[tuple[str, bool]] | None = None,
         active_index: int | None = None,
+        focus_index: int | None = None,
         empty_message: str | None = None,
     ) -> None:
         self._draw_top_bar(subtitle, subtitle_color)
-        self._draw_list_panel(targets, active_index, empty_message)
+        self._draw_list_panel(targets, active_index, focus_index, empty_message)
         self._draw_bars_right(levels)
+        self._draw_plate_hints()
 
     def save(self, filename: str) -> Path:
         path = OUT / filename
@@ -204,19 +234,24 @@ def main() -> None:
     saved: list[Path] = []
 
     r = ScreenRenderer()
-    r.split_layout("Starting...", flat_levels())
+    r.split_layout("Searching for speakers…", flat_levels(), empty_message="No speakers found")
     saved.append(r.save("01_boot.png"))
 
     r = ScreenRenderer()
-    r.split_layout("No audio input", flat_levels(), ERROR_FG, empty_message="No speakers")
+    r.split_layout("No audio input", flat_levels(), ERROR_FG, empty_message="No speakers found")
     saved.append(r.save("02_no_audio_input.png"))
 
     r = ScreenRenderer()
-    r.split_layout("Tap to play", animated_levels(1), targets=MOCK_TARGETS)
+    r.split_layout(
+        "Tap or plate buttons",
+        animated_levels(1),
+        targets=MOCK_TARGETS,
+        focus_index=2,
+    )
     saved.append(r.save("03_audio_bars_active.png"))
 
     r = ScreenRenderer()
-    r.split_layout("Tap to play", animated_levels(2), targets=MOCK_TARGETS)
+    r.split_layout("Tap or plate buttons", animated_levels(2), targets=MOCK_TARGETS, focus_index=0)
     saved.append(r.save("04_cast_targets.png"))
 
     r = ScreenRenderer()
@@ -226,15 +261,25 @@ def main() -> None:
         OK_FG,
         targets=MOCK_TARGETS,
         active_index=0,
+        focus_index=0,
     )
     saved.append(r.save("05_streaming_active.png"))
 
     r = ScreenRenderer()
-    r.split_layout("Tap ↻ to scan", flat_levels(), empty_message="No speakers")
+    r.split_layout(
+        "Searching for speakers…",
+        flat_levels(),
+        empty_message="No speakers found",
+    )
     saved.append(r.save("06_no_cast_targets.png"))
 
     r = ScreenRenderer()
-    r.split_layout("Network unreachable", flat_levels(), ERROR_FG, empty_message="No speakers")
+    r.split_layout(
+        "No Cast devices on network",
+        flat_levels(),
+        ERROR_FG,
+        empty_message="No speakers found",
+    )
     saved.append(r.save("07_discovery_error.png"))
 
     r = ScreenRenderer()
@@ -243,6 +288,7 @@ def main() -> None:
         animated_levels(4),
         ERROR_FG,
         targets=MOCK_TARGETS,
+        focus_index=1,
     )
     saved.append(r.save("08_stream_failed.png"))
 
