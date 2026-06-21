@@ -11,7 +11,7 @@ from src.display.material_widgets import (
     ICON_FG,
     MaterialButton,
     MaterialIconButton,
-    ON_ERROR_CONTAINER,
+    ERROR,
     ON_SURFACE_VARIANT,
     PANEL_BG,
     SUCCESS_FG,
@@ -50,69 +50,81 @@ class FullscreenApp:
         self._active_index: int | None = None
 
         self.subtitle_var = tk.StringVar(value="Starting...")
+        self._header_h = 34
+        self._top_btn_slot = 58
 
         self._build_layout()
         self._bind_events()
 
     def _build_layout(self) -> None:
-        self.left_panel = tk.Frame(
+        content_h = self._screen_h - self._header_h
+
+        self.top_bar = tk.Frame(
             self.root,
             bg=PANEL_BG,
-            width=self._list_width,
-            height=self._screen_h,
+            width=self._screen_w,
+            height=self._header_h,
             highlightthickness=0,
         )
-        self.left_panel.place(x=0, y=0, width=self._list_width, height=self._screen_h)
-        self.left_panel.pack_propagate(False)
+        self.top_bar.place(x=0, y=0, width=self._screen_w, height=self._header_h)
+        self.top_bar.pack_propagate(False)
 
-        header = tk.Frame(self.left_panel, bg=PANEL_BG, height=30)
-        header.pack(fill=tk.X, padx=4, pady=(6, 4))
-        header.pack_propagate(False)
-
+        text_w = self._screen_w - self._top_btn_slot
         self.subtitle_label = tk.Label(
-            header,
+            self.top_bar,
             textvariable=self.subtitle_var,
             fg=ON_SURFACE_VARIANT,
             bg=PANEL_BG,
             anchor="center",
             justify="center",
-            font=material_font(9, weight="bold"),
+            font=material_font(10, weight="bold"),
+            wraplength=max(80, text_w - 8),
         )
-        self.subtitle_label.place(relx=0.5, rely=0.5, anchor="center")
+        self.subtitle_label.place(x=4, y=0, width=text_w, height=self._header_h)
 
         self.refresh_btn = MaterialIconButton(
-            header,
+            self.top_bar,
             text="↻",
             command=self.refresh_targets,
             parent_bg=PANEL_BG,
             font_size=13,
         )
-        self.refresh_btn.place(x=self._list_width - 36, y=2)
-
-        self.targets_frame = tk.Frame(self.left_panel, bg=PANEL_BG)
-        self.targets_frame.pack(fill=tk.BOTH, expand=True, padx=4, pady=(0, 4))
-
-        bars_w = self._screen_w - self._list_width
-        self.bars = AudioBarsWidget(self.root, width=bars_w, height=self._screen_h)
-        self.bars.place(
-            x=self._list_width,
-            y=0,
-            width=bars_w,
-            height=self._screen_h,
-        )
+        self.refresh_btn.place(x=self._screen_w - self._top_btn_slot, y=4)
 
         self.exit_btn = MaterialIconButton(
-            self.root,
+            self.top_bar,
             text="✕",
             command=self.shutdown,
-            parent_bg="#0a0c12",
-            fill_color="#141820",
+            parent_bg=PANEL_BG,
+            fill_color="#1a2030",
             text_color=ICON_FG,
             size=26,
             font_size=11,
             is_danger=True,
         )
-        self.exit_btn.place(x=self._screen_w - 28, y=4)
+        self.exit_btn.place(x=self._screen_w - 30, y=4)
+
+        self.left_panel = tk.Frame(
+            self.root,
+            bg=PANEL_BG,
+            width=self._list_width,
+            height=content_h,
+            highlightthickness=0,
+        )
+        self.left_panel.place(x=0, y=self._header_h, width=self._list_width, height=content_h)
+        self.left_panel.pack_propagate(False)
+
+        self.targets_frame = tk.Frame(self.left_panel, bg=PANEL_BG)
+        self.targets_frame.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+
+        bars_w = self._screen_w - self._list_width
+        self.bars = AudioBarsWidget(self.root, width=bars_w, height=content_h)
+        self.bars.place(
+            x=self._list_width,
+            y=self._header_h,
+            width=bars_w,
+            height=content_h,
+        )
 
     def _bind_events(self) -> None:
         self.root.bind("<Escape>", lambda _e: self.shutdown())
@@ -181,7 +193,7 @@ class FullscreenApp:
         self._rebuild_target_buttons()
 
         if self.discovery.last_error:
-            self._set_subtitle(self.discovery.last_error, ON_ERROR_CONTAINER)
+            self._set_subtitle(self.discovery.last_error, ERROR)
             self._active_index = None
         elif self.targets:
             if was_active is not None and was_active < len(self.targets):
@@ -206,7 +218,12 @@ class FullscreenApp:
         self.root.update_idletasks()
 
         target = self.targets[index]
-        ok = self.controller.start_stream(target, zconf=self.discovery.zconf)
+        fresh_info = self.discovery.fresh_cast_info(target)
+        ok = self.controller.start_stream(
+            target,
+            zconf=self.discovery.zconf,
+            cast_info=fresh_info,
+        )
         status = self.controller.status
         if ok:
             self._active_index = index
@@ -215,7 +232,7 @@ class FullscreenApp:
         else:
             self._active_index = None
             self._apply_target_styles()
-            self._set_subtitle(status.message, ON_ERROR_CONTAINER)
+            self._set_subtitle(status.message, ERROR)
 
     def stop_cast(self) -> None:
         self.controller.stop_stream()
@@ -237,7 +254,7 @@ class FullscreenApp:
     def run(self) -> None:
         input_ok = self.listener.start()
         if not input_ok and not self.listener.last_error:
-            self._set_subtitle("No audio input", ON_ERROR_CONTAINER)
+            self._set_subtitle("No audio input", ERROR)
 
         self.refresh_targets()
         self._update_audio_ui()

@@ -10,6 +10,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 W, H = 320, 240
 LIST_W = W // 2
+HEADER_H = 34
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "screenshots"
 OUT.mkdir(parents=True, exist_ok=True)
@@ -23,11 +24,12 @@ SURFACE = "#1a2030"
 TARGET_FG = "#eef2f8"
 TARGET_ACTIVE_BG = "#2d6b4a"
 TARGET_ACTIVE_FG = "#f2fff6"
-ERROR_FG = "#c97a7a"
+ERROR_FG = "#e07b7b"
 OK_FG = "#6ecf94"
 EMPTY_FG = "#6b7a90"
 BTN_RADIUS = 10
 ICON_BTN_RADIUS = 8
+TOP_BTN_SLOT = 58
 
 
 def pick_font(size: int = 14, bold: bool = False):
@@ -87,17 +89,23 @@ class ScreenRenderer:
         self.image = Image.new("RGB", (W, H), "#0a0c12")
         self.draw = ImageDraw.Draw(self.image)
 
+    def _draw_top_bar(self, subtitle: str, subtitle_color: str) -> None:
+        self.draw.rectangle((0, 0, W, HEADER_H), fill=PANEL_BG)
+        text_box = (4, 0, W - TOP_BTN_SLOT, HEADER_H)
+        _centered_text(self.draw, text_box, subtitle, subtitle_color, pick_font(10, bold=True))
+        self._draw_icon_btn(W - TOP_BTN_SLOT, 4, 26, "↻")
+        self._draw_icon_btn(W - 30, 4, 26, "✕", "#1a2030")
+
     def _draw_icon_btn(self, x: int, y: int, size: int, label: str, fill: str = SURFACE) -> None:
         _rounded(self.draw, (x, y, x + size, y + size), ICON_BTN_RADIUS, fill)
         _centered_text(self.draw, (x, y, x + size, y + size), label, ICON_FG, pick_font(11, bold=True))
 
     def _draw_bars_right(self, levels: list[float]) -> None:
         x0, bars_w = LIST_W, W - LIST_W
-        self._draw_icon_btn(W - 30, 4, 26, "✕", "#141820")
-
+        content_h = H - HEADER_H
         top, bottom = GRAD_TOP, GRAD_BOTTOM
-        for y in range(H):
-            t = y / max(H - 1, 1)
+        for y in range(HEADER_H, H):
+            t = (y - HEADER_H) / max(content_h - 1, 1)
             r = int(top[0] + (bottom[0] - top[0]) * t)
             g = int(top[1] + (bottom[1] - top[1]) * t)
             b = int(top[2] + (bottom[2] - top[2]) * t)
@@ -110,7 +118,7 @@ class ScreenRenderer:
         draw_width = bars_w - margin_x * 2
         total_gap = gap * (bars + 1)
         bar_width = max(2, (draw_width - total_gap) // bars)
-        max_bar_height = H - margin_bottom - 8
+        max_bar_height = content_h - margin_bottom - 8
 
         for index, value in enumerate(levels[:bars]):
             value = max(0.0, min(1.0, value))
@@ -123,27 +131,18 @@ class ScreenRenderer:
 
     def _draw_list_panel(
         self,
-        subtitle: str,
-        subtitle_color: str,
         targets: list[tuple[str, bool]] | None = None,
         active_index: int | None = None,
         empty_message: str | None = None,
     ) -> None:
-        self.draw.rectangle((0, 0, LIST_W, H), fill=PANEL_BG)
-        subtitle_font = pick_font(9, bold=True)
-        bbox = self.draw.textbbox((0, 0), subtitle, font=subtitle_font)
-        tw = bbox[2] - bbox[0]
-        self.draw.text(((LIST_W - tw) // 2, 8), subtitle, fill=subtitle_color, font=subtitle_font)
-        self._draw_icon_btn(LIST_W - 32, 4, 26, "↻")
-
-        header_h = 24
-        list_top = header_h
+        self.draw.rectangle((0, HEADER_H, LIST_W, H), fill=PANEL_BG)
+        list_top = HEADER_H + 4
         list_bottom = H - 4
         list_h = list_bottom - list_top
         gap = 3
 
         if targets:
-            row_h = max(20, (list_h - gap * len(targets)) // len(targets))
+            row_h = max(18, (list_h - gap * len(targets)) // len(targets))
             for idx, (name, is_group) in enumerate(targets):
                 label = f"{name}  ·  group" if is_group else name
                 row_y = list_top + idx * (row_h + gap)
@@ -167,7 +166,8 @@ class ScreenRenderer:
         active_index: int | None = None,
         empty_message: str | None = None,
     ) -> None:
-        self._draw_list_panel(subtitle, subtitle_color, targets, active_index, empty_message)
+        self._draw_top_bar(subtitle, subtitle_color)
+        self._draw_list_panel(targets, active_index, empty_message)
         self._draw_bars_right(levels)
 
     def save(self, filename: str) -> Path:
@@ -239,7 +239,7 @@ def main() -> None:
 
     r = ScreenRenderer()
     r.split_layout(
-        "Could not connect",
+        "Could not connect to Chromecast",
         animated_levels(4),
         ERROR_FG,
         targets=MOCK_TARGETS,

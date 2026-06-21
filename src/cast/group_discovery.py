@@ -93,7 +93,7 @@ class CastGroupDiscovery:
     def discover(self) -> list[CastTarget]:
         self.last_error = None
         if pychromecast is None or discover_chromecasts is None:
-            self.last_error = "pychromecast is not installed"
+            self.last_error = "Run: pip install -r requirements.txt"
             return []
 
         with self._lock:
@@ -126,6 +126,15 @@ class CastGroupDiscovery:
             except Exception as exc:
                 self.last_error = str(exc)
                 return []
+
+    def fresh_cast_info(self, target: CastTarget) -> CastInfo:
+        """Return the latest mDNS record for a target when the browser is still active."""
+        if self._browser is None:
+            return target.cast_info
+        uuid = target.cast_info.uuid
+        if uuid in self._browser.devices:
+            return self._browser.devices[uuid]
+        return target.cast_info
 
     def shutdown(self) -> None:
         with self._lock:

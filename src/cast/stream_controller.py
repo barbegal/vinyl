@@ -13,6 +13,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Optional
 
+from src.cast.errors import friendly_cast_error
 from src.cast.group_discovery import CastTarget
 from src.config.settings import AppSettings
 
@@ -36,11 +37,23 @@ def _local_ip_for_lan() -> str:
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         sock.connect(("8.8.8.8", 80))
-        return str(sock.getsockname()[0])
+        ip = str(sock.getsockname()[0])
+        if not ip.startswith("127."):
+            return ip
     except Exception:
-        return "127.0.0.1"
+        pass
     finally:
         sock.close()
+
+    try:
+        hostname = socket.gethostname()
+        ip = socket.gethostbyname(hostname)
+        if not ip.startswith("127."):
+            return ip
+    except Exception:
+        pass
+
+    return "127.0.0.1"
 
 
 class _HlsServer:
@@ -135,11 +148,11 @@ class ChromecastStreamController:
             str(playlist_path),
         ]
 
-    def start_stream(self, target: CastTarget, zconf=None) -> bool:
+    def start_stream(self, target: CastTarget, zconf=None, cast_info=None) -> bool:
         self.stop_stream()
 
         if pychromecast is None or get_chromecast_from_cast_info is None:
-            self._set_status(False, target.name, "pychromecast is not installed")
+            self._set_status(False, target.name, "Run: pip install -r requirements.txt")
             return False
 
         ffmpeg_path = shutil.which(self.settings.ffmpeg_bin)
@@ -147,7 +160,22 @@ class ChromecastStreamController:
             self._set_status(False, target.name, f"Could not find {self.settings.ffmpeg_bin}")
             return False
 
+        info = cast_info or target.cast_info
+        host_ip = _local_ip_for_lan()
+        if host_ip.startswith("127."):
+            self._set_status(False, target.name, "Pi has no LAN IP — check Wi-Fi")
+            return False
+
         try:
+            self._chromecast = get_chromecast_from_cast_info(
+                info,
+                zconf=zconf,
+                tries=3,
+                timeout=20.0,
+                retry_wait=2.0,
+            )
+            self._chromecast.wait(timeout=20)
+
             self._hls_root = Path(tempfile.mkdtemp(prefix="pi-audio-hls-"))
             playlist = self._hls_root / "live.m3u8"
 
@@ -167,29 +195,19 @@ class ChromecastStreamController:
                 self.stop_stream()
                 return False
 
-            host_ip = _local_ip_for_lan()
             self._server = _HlsServer(self._hls_root, host_ip, self.settings.hls_http_port)
             self._server.start()
 
             stream_url = f"http://{host_ip}:{self.settings.hls_http_port}/live.m3u8"
 
-            self._chromecast = get_chromecast_from_cast_info(
-                target.cast_info,
-                zconf=zconf,
-                tries=3,
-                timeout=15.0,
-                retry_wait=2.0,
-            )
-            self._chromecast.wait(timeout=15)
-
             media_controller = self._chromecast.media_controller
             media_controller.play_media(stream_url, "application/vnd.apple.mpegurl")
-            media_controller.block_until_active(timeout=15)
+            media_controller.block_until_active(timeout=20)
 
             self._set_status(True, target.name, "Streaming", stream_url)
             return True
         except Exception as exc:
-            self._set_status(False, target.name, str(exc))
+            self._set_status(False, target.name, friendly_cast_error(exc))
             self.stop_stream()
             return False
 
