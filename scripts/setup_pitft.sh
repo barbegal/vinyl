@@ -69,6 +69,8 @@ if [[ -n "$CONFIG_TXT" ]]; then
     sed -i '/^dtoverlay=pitft28/d' "$CONFIG_TXT"
     echo "  removed old pitft28 overlay line(s)"
   fi
+  # drm mode breaks Xorg fbdev → black TFT (FBIOPUTCMAP busy). Strip if left from manual edits.
+  sed -i '/^dtoverlay=pitft28/s/,drm//g; s/drm,//g' "$CONFIG_TXT" 2>/dev/null || true
   echo "$OVERLAY_LINE" >>"$CONFIG_TXT"
   echo "  set overlay: $OVERLAY_LINE"
   if ! grep -qE '^dtparam=spi=on' "$CONFIG_TXT"; then
@@ -91,8 +93,31 @@ fi
 echo "=== Pointing Xorg at /dev/fb1 (fbdev) ==="
 mkdir -p /etc/X11/xorg.conf.d
 cat > /etc/X11/xorg.conf.d/99-pitft.conf <<'EOF'
+Section "ServerFlags"
+  Option "BlankTime" "0"
+  Option "StandbyTime" "0"
+  Option "SuspendTime" "0"
+  Option "OffTime" "0"
+EndSection
+
+Section "ServerLayout"
+  Identifier "PiTFT"
+  Screen 0 "Screen0" 0 0
+EndSection
+
+Section "Screen"
+  Identifier "Screen0"
+  Device "Device0"
+  Monitor "Monitor0"
+  DefaultDepth 16
+EndSection
+
+Section "Monitor"
+  Identifier "Monitor0"
+EndSection
+
 Section "Device"
-  Identifier "Adafruit PiTFT"
+  Identifier "Device0"
   Driver "fbdev"
   Option "fbdev" "/dev/fb1"
 EndSection

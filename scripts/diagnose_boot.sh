@@ -63,6 +63,9 @@ for p in /boot/firmware/config.txt /boot/config.txt; do
   if [[ -f "$p" ]]; then
     echo "$p:"
     grep -E '^(dtoverlay=pitft|disable_splash)=?' "$p" 2>/dev/null | sed 's/^/  /' || echo "  (no pitft overlay line)"
+    if grep -qE '^dtoverlay=pitft28.*drm' "$p" 2>/dev/null; then
+      echo "  WARNING: overlay has ,drm — causes black TFT with X fbdev. Run: sudo ./scripts/fix_black_tft.sh"
+    fi
     break
   fi
 done
