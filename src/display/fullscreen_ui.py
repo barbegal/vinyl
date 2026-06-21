@@ -37,12 +37,6 @@ class FullscreenApp:
         self._list_width = self._screen_w // 2
 
         self.root = root or tk.Tk()
-        if root is None:
-            self.root.title("Pi Audio Cast Display")
-            self.root.configure(bg="#0a0c12")
-            self.root.geometry(f"{self._screen_w}x{self._screen_h}")
-            if settings.fullscreen:
-                self.root.attributes("-fullscreen", True)
 
         self.listener: Optional[AudioInputListener] = None
         self.discovery: Optional[CastGroupDiscovery] = None
@@ -59,8 +53,9 @@ class FullscreenApp:
         self._header_h = 34
         self._top_btn_slot = 58
         # Plate button hint strip — aligned with the physical shield column.
+        # 4 buttons (GPIO 17/22/23/27) → 4 evenly spaced icons, top to bottom.
         self._hint_strip_w = 26
-        self._plate_hint_slots = (0, 1, 3, 4)  # skip middle (unused Right)
+        self._plate_hint_slots = (0, 1, 2, 3)
         self._plate_hint_labels = ("↑", "↓", "↻", "OK")
         self._plate_on_left = settings.plate_buttons_side == "left"
 
@@ -70,6 +65,19 @@ class FullscreenApp:
 
         self.root.title("Pi Audio Cast Display")
         self.root.configure(bg="#0a0c12")
+        # Always pin the window to the panel size and go fullscreen — even when
+        # reusing the boot-debug root or running under a bare X server with no
+        # window manager (where the window would otherwise default to a small
+        # square in the top-left corner).
+        self.root.geometry(f"{self._screen_w}x{self._screen_h}+0+0")
+        if settings.fullscreen:
+            self.root.attributes("-fullscreen", True)
+            self.root.update_idletasks()
+            # Bare startx has no WM to honor _NET_WM_STATE_FULLSCREEN; force the
+            # override-redirect geometry so the UI fills /dev/fb1 regardless.
+            if self.root.winfo_width() < self._screen_w or self.root.winfo_height() < self._screen_h:
+                self.root.overrideredirect(True)
+                self.root.geometry(f"{self._screen_w}x{self._screen_h}+0+0")
 
         self._build_layout()
         self._bind_events()
@@ -224,7 +232,7 @@ class FullscreenApp:
     def _build_plate_button_hints(self, content_h: int, hint_x: int) -> None:
         """Labels along the plate button column (left or right per rotation)."""
         hint_font = material_font(11, weight="bold")
-        slot_count = 5  # Adafruit plate: 5 buttons top-to-bottom
+        slot_count = len(self._plate_hint_slots)  # Adafruit plate: 4 buttons
         slot_h = content_h / slot_count
 
         for slot, label in zip(self._plate_hint_slots, self._plate_hint_labels):

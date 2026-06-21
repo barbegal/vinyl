@@ -115,16 +115,23 @@ Section "Screen"
   Device "Device0"
   Monitor "Monitor0"
   DefaultDepth 16
+  SubSection "Display"
+    Depth 16
+    Modes "320x240"
+    Virtual 320 240
+  EndSubSection
 EndSection
 
 Section "Monitor"
   Identifier "Monitor0"
+  Option "DPMS" "false"
 EndSection
 
 Section "Device"
   Identifier "Device0"
   Driver "fbdev"
   Option "fbdev" "/dev/fb1"
+  Option "ShadowFB" "true"
 EndSection
 EOF
 
