@@ -45,10 +45,19 @@ for svc in lightdm.service display-manager.service; do
   fi
 done
 if command -v raspi-config >/dev/null; then
+  raspi-config nonint do_ssh 0 2>/dev/null || true
   raspi-config nonint do_boot_behaviour B1 2>/dev/null || true
 fi
 systemctl enable --now display-manager.service 2>/dev/null || \
   systemctl enable --now lightdm.service 2>/dev/null || true
+
+for svc in ssh sshd; do
+  if systemctl list-unit-files "${svc}.service" 2>/dev/null | grep -q "${svc}.service"; then
+    systemctl enable "${svc}.service" 2>/dev/null || true
+    systemctl restart "${svc}.service" 2>/dev/null || true
+    echo "  ${svc}: $(systemctl is-active "${svc}.service" 2>/dev/null || echo unknown)"
+  fi
+done
 
 systemctl daemon-reload
 

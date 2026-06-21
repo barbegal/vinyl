@@ -74,8 +74,9 @@ echo "  wrote $OVERRIDE_DIR/autologin.conf"
 
 echo "Installing /etc/profile.d/vinyl-kiosk.sh (startx on tty1 login)..."
 cat > /etc/profile.d/vinyl-kiosk.sh <<EOF
-# Auto-start cast app X session on tty1 (sourced by login shells via /etc/profile).
-if [ "\$(tty 2>/dev/null)" = "/dev/tty1" ] \\
+# Auto-start cast app X session on tty1 only — never on SSH.
+if [ -z "\${SSH_CONNECTION:-}" ] \\
+   && [ "\$(tty 2>/dev/null)" = "/dev/tty1" ] \\
    && [ -z "\${DISPLAY:-}" ] \\
    && [ "\$(id -un)" = "$APP_USER" ] \\
    && [ -f "$APP_DIR/scripts/start_app.sh" ]; then

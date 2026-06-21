@@ -35,6 +35,8 @@ chmod +x "$APP_DIR/scripts/start_app.sh" \
          "$APP_DIR/scripts/setup_pitft.sh" \
          "$APP_DIR/scripts/detect_touch.sh" \
          "$APP_DIR/scripts/recover_display.sh" \
+         "$APP_DIR/scripts/recover.sh" \
+         "$APP_DIR/scripts/fix_ssh.sh" \
          "$APP_DIR/scripts/refresh_xinitrc.sh" \
          "$APP_DIR/scripts/flip_display.sh" \
          "$APP_DIR/scripts/setup_pitft_buttons.sh" \
@@ -57,7 +59,10 @@ chmod +x "$USER_HOME/.xinitrc"
 
 STARTX_GUARD='
 # >>> pi-audio-cast-display startx >>>
-if [ -z "${DISPLAY:-}" ] && [ "${XDG_VTNR:-}" = "1" ]; then
+# Only local tty1 — never SSH (SSH_CONNECTION is set for remote logins).
+if [ -z "${DISPLAY:-}" ] \
+   && [ -z "${SSH_CONNECTION:-}" ] \
+   && [ "$(tty 2>/dev/null)" = "/dev/tty1" ]; then
   [ -e /dev/fb1 ] && export FRAMEBUFFER=/dev/fb1
   exec startx
 fi

@@ -130,7 +130,8 @@ If `ui visible on tft` exceeds the SLO, check: slow SD card, extra `systemd` uni
 | `scripts/setup_pitft_buttons.sh` | GPIO plate buttons |
 | `scripts/setup_rpconnect.sh` | Remote mirror: x11vnc on `:0` + enable rpi-connect |
 | `scripts/enable_fast_boot.sh` | Desktop off, autologin, profile.d, calls setup_pitft |
-| `scripts/recover_display.sh` | Recovery → capacitive overlay |
+| `scripts/fix_ssh.sh` | SSH broken after boot edits — fixes profile guards + sshd |
+| `scripts/recover.sh` | **Run this when broken** — chmod, SSH, refresh xinitrc, .env |
 | `scripts/flip_display.sh` | Toggle rotation 90 ↔ 270 |
 | `scripts/diagnose_boot.sh` | Boot/display/runtime checks |
 | `scripts/detect_touch.sh` | I²C scan for FT6206 at 0x38 |
@@ -140,7 +141,7 @@ If `ui visible on tft` exceeds the SLO, check: slow SD card, extra `systemd` uni
 Pi recovery one-liner after pull:
 
 ```bash
-cd /home/vinyl/Desktop/vinyl && git pull && chmod +x scripts/*.sh && ./scripts/refresh_xinitrc.sh
+cd /home/vinyl/Desktop/vinyl && git pull && bash scripts/recover.sh && sudo reboot
 ```
 
 ## Code layout

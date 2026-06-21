@@ -79,6 +79,25 @@ The installer:
 
 After reboot you should see only the cast UI on the touchscreen — no desktop.
 
+**Something broken?** One recovery command (fixes permissions, stale `~/.xinitrc`, missing `.env`, re-enables SSH):
+
+```bash
+cd /home/vinyl/Desktop/vinyl
+git pull
+bash scripts/recover.sh
+sudo reboot
+```
+
+**SSH stopped working?** Usually a boot/profile edit ran `exec startx` on SSH login. On the Pi (keyboard/HDMI or an existing session):
+
+```bash
+cd /home/vinyl/Desktop/vinyl
+git pull
+bash scripts/fix_ssh.sh
+```
+
+If you cannot log in at all, mount the SD card on another computer and create an empty file `ssh` in the `boot` or `boot/firmware` partition, then boot the Pi and run `fix_ssh.sh`.
+
 **How long should boot take?** With desktop disabled, expect a blank TFT for the first ~20–30s
 (kernel/systemd). Before X starts you may see brief **console text** on the TFT (`Vinyl kiosk /
 Starting X on PiTFT…`). Once X is up, a **boot debug panel** lists each startup step until the
