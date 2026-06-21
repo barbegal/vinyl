@@ -67,7 +67,8 @@ for p in /boot/firmware/config.txt /boot/config.txt; do
   fi
 done
 [[ -f /etc/X11/xorg.conf.d/99-pitft.conf ]] && echo "Xorg fbdev conf: present" || echo "Xorg fbdev conf: MISSING — run ./scripts/setup_pitft.sh"
-[[ -f /etc/X11/xorg.conf.d/99-pitft-calibration.conf ]] && grep -o 'CalibrationMatrix "[^"]*"' /etc/X11/xorg.conf.d/99-pitft-calibration.conf | sed 's/^/  touch /' || echo "  touch calibration: none"
+[[ -f /etc/X11/xorg.conf.d/99-pitft-touch.conf ]] && echo "Xorg touch conf: present (evdev)" || echo "Xorg touch conf: MISSING"
+[[ -f /etc/X11/xorg.conf.d/99-pitft-calibration.conf ]] && echo "WARNING: old libinput calibration still present — run setup_pitft.sh"
 echo "FRAMEBUFFER: ${FRAMEBUFFER:-not set (set before startx via profile hook)}"
 echo "I2C (capacitive touch): $(ls /dev/i2c-* 2>/dev/null | tr '\n' ' ' || echo 'none — enable for 28c')"
 if command -v xinput >/dev/null 2>&1 && [[ -n "${DISPLAY:-}" ]]; then

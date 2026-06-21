@@ -36,6 +36,7 @@ chmod +x "$APP_DIR/scripts/start_app.sh" \
          "$APP_DIR/scripts/detect_touch.sh" \
          "$APP_DIR/scripts/recover_display.sh" \
          "$APP_DIR/scripts/refresh_xinitrc.sh" \
+         "$APP_DIR/scripts/flip_display.sh" \
          "$APP_DIR/scripts/kiosk_xinitrc.sh"
 
 echo "=== Removing any old systemd unit ==="

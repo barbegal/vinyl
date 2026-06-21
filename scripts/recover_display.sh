@@ -9,7 +9,7 @@ if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
 fi
 
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ROTATE="${1:-90}"
+ROTATE="${1:-270}"
 
 echo "=== PiTFT display recovery (capacitive 28c, rotate=${ROTATE}) ==="
 echo "If you have resistive hardware, use: sudo $0 ${ROTATE} 28r"
