@@ -10,6 +10,7 @@ cd "$APP_DIR"
 USER_NAME="${USER:-$(whoami)}"
 USER_HOME="${HOME}"
 
+INSTALL_BUTTONS=0
 DISPLAY_FIX=0
 STRIP_BUTTONS=0
 REPAIR_CONFIG=0
@@ -24,6 +25,7 @@ Usage: bash scripts/recover.sh [--display [rotation] [28c|28r]]
   --display   also remove ,drm from overlay and re-run setup_pitft (needs sudo)
   --strip-buttons  remove plate gpio-key overlays only
   --repair-config  strip ALL gpio-key + duplicate pitft; write one clean block (bind errors)
+  --buttons        re-enable plate gpio-key overlays (no GPIO25 — safe for display)
 
 Then: sudo reboot
 Desktop undo: sudo ./scripts/restore_desktop.sh
@@ -48,6 +50,10 @@ while [[ $# -gt 0 ]]; do
       shift
       [[ $# -gt 0 && "$1" =~ ^[0-9]+$ ]] && { ROTATE="$1"; shift; }
       [[ $# -gt 0 && "$1" =~ ^28[cr]$ ]] && { PANEL="$1"; shift; }
+      ;;
+    --buttons)
+      INSTALL_BUTTONS=1
+      shift
       ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1"; usage; exit 1 ;;
@@ -132,6 +138,17 @@ if [[ "$STRIP_BUTTONS" -eq 1 ]]; then
   echo ""
   echo "=== strip plate button overlays ==="
   sudo bash "$APP_DIR/scripts/remove_pitft_buttons.sh"
+fi
+
+if [[ "$INSTALL_BUTTONS" -eq 1 ]]; then
+  echo ""
+  echo "=== plate buttons (GPIO 17/22/23/27 — NOT 25) ==="
+  sudo bash "$APP_DIR/scripts/setup_pitft_buttons.sh"
+fi
+
+if [[ -f "$APP_DIR/.env" ]] && grep -qE '^GOOGLE_GROUPS_ONLY=true' "$APP_DIR/.env"; then
+  sed -i 's/^GOOGLE_GROUPS_ONLY=.*/GOOGLE_GROUPS_ONLY=false/' "$APP_DIR/.env"
+  echo "  set GOOGLE_GROUPS_ONLY=false in .env (show all Cast devices)"
 fi
 
 echo ""

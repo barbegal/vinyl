@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import tkinter as tk
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Callable, Optional
 
 from src.boot_timing import log_milestone
 from src.config.settings import AppSettings
 from src.display.bars_widget import AudioBarsWidget
 from src.display.material_widgets import (
     ICON_FG,
+    PRIMARY,
+    PRIMARY_CONTAINER,
+    ON_PRIMARY,
     MaterialButton,
     MaterialIconButton,
     ERROR,
@@ -49,15 +52,18 @@ class FullscreenApp:
         self._auto_after_id: str | None = None
         self._refresh_ms = max(2000, int(settings.cast_refresh_interval * 1000))
 
-        self.subtitle_var = tk.StringVar(value="Searching for speakers…")
+        self.subtitle_var = tk.StringVar(value="Select source")
         self._header_h = 34
         self._top_btn_slot = 58
+        self._idle_subtitle = "Select source"
         # Plate button hint strip — aligned with the physical shield column.
         # 4 buttons (GPIO 17/22/23/27) → 4 evenly spaced icons, top to bottom.
         self._hint_strip_w = 26
         self._plate_hint_slots = (0, 1, 2, 3)
         self._plate_hint_labels = ("↑", "↓", "↻", "OK")
         self._plate_on_left = settings.plate_buttons_side == "left"
+        self._plate_hint_widgets: list[tk.Label] = []
+        self._pitft_keys_bound = False
 
         self._boot_debug = boot_debug
         self._network_poll_id: str | None = None
@@ -241,13 +247,14 @@ class FullscreenApp:
 
     def _build_plate_button_hints(self, content_h: int, hint_x: int) -> None:
         """Labels along the plate button column (left or right per rotation)."""
+        self._plate_hint_widgets = []
         hint_font = material_font(11, weight="bold")
         slot_count = len(self._plate_hint_slots)  # Adafruit plate: 4 buttons
         slot_h = content_h / slot_count
 
         for slot, label in zip(self._plate_hint_slots, self._plate_hint_labels):
             y = self._header_h + int(slot * slot_h)
-            tk.Label(
+            widget = tk.Label(
                 self.root,
                 text=label,
                 fg=ON_SURFACE_VARIANT,
@@ -255,31 +262,97 @@ class FullscreenApp:
                 font=hint_font,
                 width=2,
                 anchor="center",
-            ).place(
+            )
+            widget.place(
                 x=hint_x,
                 y=y,
                 width=self._hint_strip_w,
                 height=int(slot_h),
             )
+            self._plate_hint_widgets.append(widget)
+
+    def _flash_plate_hint(self, slot: int) -> None:
+        if slot < 0 or slot >= len(self._plate_hint_widgets):
+            return
+        widget = self._plate_hint_widgets[slot]
+        widget.configure(fg=ON_PRIMARY, bg=PRIMARY_CONTAINER)
+        self.root.after(
+            180,
+            lambda w=widget: w.configure(fg=ON_SURFACE_VARIANT, bg=PANEL_BG),
+        )
 
     def _bind_events(self) -> None:
+        if self._pitft_keys_bound:
+            return
+        self._pitft_keys_bound = True
         self.root.bind("<Escape>", lambda _e: self.shutdown())
         self.root.protocol("WM_DELETE_WINDOW", self.shutdown)
         self._bind_pitft_keys()
+        self.root.bind_all("<Button-1>", self._on_screen_tap, add="+")
 
     def _bind_pitft_keys(self) -> None:
         """PiTFT plate buttons (gpio-keys) and keyboard equivalents."""
-        bindings = {
-            "<Up>": lambda _e: self._scroll_focus(-1),
-            "<Down>": lambda _e: self._scroll_focus(1),
-            "<Return>": lambda _e: self._select_focused(),
-            "<KP_Enter>": lambda _e: self._select_focused(),
-            "<Left>": lambda _e: self.refresh_targets(),
-            "<KP_Left>": lambda _e: self.refresh_targets(),
-            "<F5>": lambda _e: self.refresh_targets(),
+        bindings: dict[str, tuple[int, Callable[[], None]]] = {
+            "<Up>": (0, lambda: self._scroll_focus(-1)),
+            "<Down>": (1, lambda: self._scroll_focus(1)),
+            "<Return>": (3, self._select_focused),
+            "<KP_Enter>": (3, self._select_focused),
+            "<Left>": (2, self.refresh_targets),
+            "<KP_Left>": (2, self.refresh_targets),
+            "<F5>": (2, self.refresh_targets),
         }
-        for seq, handler in bindings.items():
-            self.root.bind_all(seq, handler, add="+")
+        for seq, (slot, action) in bindings.items():
+            self.root.bind_all(
+                seq,
+                lambda _e, s=slot, fn=action: self._plate_action(s, fn),
+                add="+",
+            )
+
+    def _plate_action(self, hint_slot: int, action: Callable[[], None]) -> None:
+        self._flash_plate_hint(hint_slot)
+        action()
+
+    def _on_screen_tap(self, event: tk.Event) -> None:
+        """Fallback tap handler when touch events miss individual widgets."""
+        widget = event.widget
+        if isinstance(widget, (MaterialButton, MaterialIconButton)):
+            return
+
+        x = event.x
+        y = event.y
+        if y < self._header_h:
+            refresh_x = self._screen_w - self._top_btn_slot
+            if x >= refresh_x:
+                self._flash_plate_hint(2)
+                self.refresh_targets()
+            return
+
+        layout = self._content_layout()
+        list_x = layout["list_x"]
+        list_w = layout["list_w"]
+        if list_x <= x < list_x + list_w and self.targets:
+            content_h = self._screen_h - self._header_h
+            rel_y = y - self._header_h
+            idx = int((rel_y / max(1, content_h)) * len(self.targets))
+            idx = max(0, min(len(self.targets) - 1, idx))
+            self._on_target_tap(idx)
+            return
+
+        hint_x = layout["hint_x"]
+        if hint_x <= x < hint_x + self._hint_strip_w:
+            content_h = self._screen_h - self._header_h
+            rel_y = y - self._header_h
+            slot = int((rel_y / max(1, content_h)) * len(self._plate_hint_slots))
+            slot = max(0, min(len(self._plate_hint_slots) - 1, slot))
+            self._flash_plate_hint(slot)
+            if slot == 0:
+                self._scroll_focus(-1)
+            elif slot == 1:
+                self._scroll_focus(1)
+            elif slot == 2:
+                self.refresh_targets()
+            else:
+                self._select_focused()
 
     def _scroll_focus(self, delta: int) -> None:
         if not self.targets:
@@ -384,9 +457,9 @@ class FullscreenApp:
         if active_name is not None:
             self._set_subtitle(f"Playing on {active_name}", SUCCESS_FG)
         elif self.targets:
-            self._set_subtitle("Tap or plate buttons")
+            self._set_subtitle(self._idle_subtitle)
         else:
-            self._set_subtitle("Searching for speakers…")
+            self._set_subtitle("Scanning…")
 
     def refresh_targets(self, announce: bool = True) -> None:
         from src.network_status import is_lan_ready, network_status_line
@@ -399,7 +472,8 @@ class FullscreenApp:
         if announce:
             self._set_subtitle("Scanning…")
 
-        self.targets = self.discovery.discover()
+        wait = self.settings.cast_discovery_timeout if announce else 0.0
+        self.targets = self.discovery.discover(wait_seconds=wait)
         signature = self._signature(self.targets)
 
         if signature != self._targets_signature:
@@ -481,7 +555,7 @@ class FullscreenApp:
         self._active_uuid = None
         self._apply_target_styles()
         if self.targets:
-            self._set_subtitle("Tap to play · ↑↓ scroll · ← refresh · Enter select")
+            self._set_subtitle(self._idle_subtitle)
         else:
             self._set_subtitle("Stopped")
 
@@ -598,7 +672,9 @@ class FullscreenApp:
     def _load_cast_worker(self) -> None:
         try:
             self._ensure_cast()
-            targets = self.discovery.discover()
+            targets = self.discovery.discover(
+                wait_seconds=self.settings.cast_discovery_timeout,
+            )
             error = self.discovery.last_error
         except Exception as exc:
             targets = []

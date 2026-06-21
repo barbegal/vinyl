@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+import time
 from dataclasses import dataclass
 from typing import Optional
 from uuid import UUID
@@ -53,7 +54,7 @@ class CastTarget:
 class CastGroupDiscovery:
     def __init__(
         self,
-        groups_only: bool = True,
+        groups_only: bool = False,
         discovery_timeout: float = 12.0,
         known_hosts: list[str] | None = None,
     ) -> None:
@@ -122,35 +123,54 @@ class CastGroupDiscovery:
         self._zconf = None
         self._started = False
 
-    def discover(self) -> list[CastTarget]:
-        """Non-blocking read of the persistent browser's accumulated devices."""
+    def _read_browser_targets(self) -> list[CastTarget]:
+        if not self._ensure_browser():
+            self.last_error = "Run: pip install -r requirements.txt"
+            return []
+
+        devices = list(self._browser.devices.values())
+        deduped: dict[str, CastTarget] = {}
+        for device in devices:
+            target = self._from_cast_info(device)
+            deduped[target.uuid] = target
+        filtered = self._filter_targets(list(deduped.values()), self.groups_only)
+
+        if not filtered and devices:
+            self.last_error = (
+                f"Found {len(devices)} device(s) but none matched the filter"
+            )
+
+        return filtered
+
+    def discover(self, wait_seconds: float | None = None) -> list[CastTarget]:
+        """Read Cast devices from the persistent browser (optionally wait for mDNS)."""
         self.last_error = None
         if pychromecast is None or CastBrowser is None:
             self.last_error = "Run: pip install -r requirements.txt"
             return []
 
-        with self._lock:
-            try:
-                if not self._ensure_browser():
-                    self.last_error = "Run: pip install -r requirements.txt"
+        wait = wait_seconds if wait_seconds is not None else 0.0
+        if wait <= 0:
+            with self._lock:
+                try:
+                    return self._read_browser_targets()
+                except Exception as exc:
+                    self.last_error = str(exc)
                     return []
 
-                devices = list(self._browser.devices.values())
-                deduped: dict[str, CastTarget] = {}
-                for device in devices:
-                    target = self._from_cast_info(device)
-                    deduped[target.uuid] = target
-                filtered = self._filter_targets(list(deduped.values()), self.groups_only)
-
-                if not filtered and devices:
-                    self.last_error = (
-                        f"Found {len(devices)} device(s) but none matched the filter"
-                    )
-
-                return filtered
+        deadline = time.time() + wait
+        best: list[CastTarget] = []
+        with self._lock:
+            try:
+                while time.time() < deadline:
+                    current = self._read_browser_targets()
+                    if len(current) > len(best):
+                        best = list(current)
+                    time.sleep(0.4)
+                return best if best else self._read_browser_targets()
             except Exception as exc:
                 self.last_error = str(exc)
-                return []
+                return best
 
     def fresh_cast_info(self, target: CastTarget) -> CastInfo:
         """Return the latest mDNS record for a target when the browser is still active."""
