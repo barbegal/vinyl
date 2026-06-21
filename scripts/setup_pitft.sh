@@ -65,30 +65,35 @@ if [[ -n "$CONFIG_TXT" ]]; then
   cp -a "$CONFIG_TXT" "${CONFIG_TXT}.vinyl.bak"
   echo "  backup: ${CONFIG_TXT}.vinyl.bak"
   OVERLAY_LINE="$(build_overlay_line)"
-  if grep -qE '^dtoverlay=pitft28' "$CONFIG_TXT"; then
-    sed -i '/^dtoverlay=pitft28/d' "$CONFIG_TXT"
-    echo "  removed old pitft28 overlay line(s)"
-  fi
-  # drm mode breaks Xorg fbdev → black TFT (FBIOPUTCMAP busy). Strip if left from manual edits.
+  DTBO="/boot/firmware/overlays/${DESIRED_BASE}.dtbo"
+  [[ -f "$DTBO" ]] && echo "  overlay file: $DTBO" || echo "  WARNING: $DTBO missing — try Adafruit pitft installer"
+
+  sed -i '/^# vinyl pitft$/,/^# end vinyl pitft$/d' "$CONFIG_TXT"
+  sed -i '/^dtoverlay=pitft28/d' "$CONFIG_TXT"
+  sed -i '/^disable_splash=/d' "$CONFIG_TXT"
   sed -i '/^dtoverlay=pitft28/s/,drm//g; s/drm,//g' "$CONFIG_TXT" 2>/dev/null || true
-  echo "$OVERLAY_LINE" >>"$CONFIG_TXT"
-  echo "  set overlay: $OVERLAY_LINE"
-  if ! grep -qE '^dtparam=spi=on' "$CONFIG_TXT"; then
-    echo "dtparam=spi=on" >>"$CONFIG_TXT"
-    echo "  added dtparam=spi=on"
-  fi
-  if [[ "$PANEL" == "28c" ]] && ! grep -qE '^dtparam=i2c_arm=on' "$CONFIG_TXT"; then
-    echo "dtparam=i2c_arm=on" >>"$CONFIG_TXT"
-    echo "  added dtparam=i2c_arm=on"
-  fi
-  if grep -qE '^disable_splash=' "$CONFIG_TXT"; then
-    sed -i '/^disable_splash=/d' "$CONFIG_TXT"
-  fi
-  echo 'disable_splash=1' >>"$CONFIG_TXT"
-  echo "  set disable_splash=1 (deduped)"
+
+  {
+    echo ""
+    echo "# vinyl pitft"
+    echo "dtparam=spi=on"
+    if [[ "$PANEL" == "28c" ]]; then
+      echo "dtparam=i2c_arm=on"
+    fi
+    echo "$OVERLAY_LINE"
+    echo "disable_splash=1"
+    echo "# end vinyl pitft"
+  } >>"$CONFIG_TXT"
+  echo "  wrote config block: spi=on + $OVERLAY_LINE"
 else
   echo "  WARNING: config.txt not found on /boot"
 fi
+
+echo ""
+echo "=== After reboot ==="
+echo "  ls -la /dev/fb1     # must exist"
+echo "  dtoverlay -l        # should list pitft28"
+echo "  sudo dmesg | grep -i pitft"
 
 echo "=== Pointing Xorg at /dev/fb1 (fbdev) ==="
 mkdir -p /etc/X11/xorg.conf.d

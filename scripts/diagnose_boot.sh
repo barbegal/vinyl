@@ -24,6 +24,9 @@ run_diagnosis() {
   echo "=== boot config ==="
   echo "default target: $(systemctl get-default 2>/dev/null || echo unknown)"
   echo "getty@tty1:     $(systemctl is-enabled getty@tty1.service 2>/dev/null || echo unknown) / $(systemctl is-active getty@tty1.service 2>/dev/null || echo unknown)"
+  if systemctl is-failed getty@tty1.service 2>/dev/null | grep -q failed; then
+    echo "  WARNING: getty@tty1 failed — try: sudo systemctl reset-failed getty@tty1 && sudo systemctl start getty@tty1"
+  fi
   echo "lightdm:        $(systemctl is-enabled lightdm.service 2>/dev/null || echo not-found) / $(systemctl is-active lightdm.service 2>/dev/null || echo not-found)"
 
   AUTLOGIN="/etc/systemd/system/getty@tty1.service.d/autologin.conf"
