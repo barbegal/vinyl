@@ -8,6 +8,7 @@ from src.cast.stream_controller import ChromecastStreamController
 from src.config.settings import AppSettings
 from src.display.bars_widget import AudioBarsWidget
 from src.display.material_widgets import (
+    ICON_FG,
     MaterialButton,
     MaterialIconButton,
     ON_ERROR_CONTAINER,
