@@ -48,9 +48,10 @@ python -m src.main
 
 Controls:
 
-- `Refresh`: rescan Cast targets/groups
+- `Refresh`: rescan Cast targets/groups (on-screen ↻, **plate Left**, or **F5**)
 - tap a speaker/group to start casting (highlighted green while playing)
 - tap the active (green) speaker again to stop
+- **PiTFT plate buttons** (after `setup_pitft_buttons.sh`): **↑/↓** scroll, **Enter** select, **←** refresh
 - `Esc`: exit app
 
 ## Fast boot — no Raspberry Pi Desktop (kiosk mode)

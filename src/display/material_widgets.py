@@ -126,6 +126,7 @@ class MaterialButton(tk.Canvas):
         self._radius = radius
         self._font = material_font(font_size, weight=font_weight)
         self._is_active = False
+        self._is_focused = False
         self._hovering = False
 
         self.bind("<Configure>", self._on_configure)
@@ -136,6 +137,10 @@ class MaterialButton(tk.Canvas):
 
     def set_active(self, active: bool) -> None:
         self._is_active = active
+        self._redraw()
+
+    def set_focused(self, focused: bool) -> None:
+        self._is_focused = focused
         self._redraw()
 
     def set_text(self, text: str) -> None:
@@ -189,6 +194,15 @@ class MaterialButton(tk.Canvas):
             font=self._font,
             anchor="center",
         )
+        if self._is_focused and not self._is_active:
+            self.create_rectangle(
+                2,
+                2,
+                w - 2,
+                h - 2,
+                outline=SUCCESS_FG,
+                width=2,
+            )
 
 
 class MaterialIconButton(tk.Canvas):

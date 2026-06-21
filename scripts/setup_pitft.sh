@@ -7,6 +7,8 @@
 #   panel:    28c|28r        (default 28c, capacitive)
 set -euo pipefail
 
+APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
 if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
   echo "Run with sudo: sudo ./scripts/setup_pitft.sh [rotation] [panel] [user]"
   exit 1
@@ -132,3 +134,7 @@ echo ""
 echo "PiTFT (${PANEL}) rotate=${ROTATE} on /dev/fb1."
 echo "If upside down, flip: sudo $0 90 $PANEL   (or 270)"
 echo "Reboot to apply: sudo reboot"
+
+if [[ -x "$APP_DIR/scripts/setup_pitft_buttons.sh" ]]; then
+  "$APP_DIR/scripts/setup_pitft_buttons.sh"
+fi

@@ -48,6 +48,7 @@ class FullscreenApp:
         self.targets: list[CastTarget] = []
         self._target_buttons: list[MaterialButton] = []
         self._active_uuid: str | None = None
+        self._focus_index: int | None = None
         self._targets_signature: tuple | None = None
         self._auto_after_id: str | None = None
         self._refresh_ms = max(2000, int(settings.cast_refresh_interval * 1000))
@@ -55,6 +56,10 @@ class FullscreenApp:
         self.subtitle_var = tk.StringVar(value="Searching for speakers…")
         self._header_h = 34
         self._top_btn_slot = 58
+        # Right-edge strip aligned with PiTFT plate buttons (5 slots; 4 labeled).
+        self._hint_strip_w = 26
+        self._plate_hint_slots = (0, 1, 3, 4)  # skip middle (unused Right)
+        self._plate_hint_labels = ("↑", "↓", "↻", "OK")
 
         self._build_layout()
         self._bind_events()
@@ -120,7 +125,7 @@ class FullscreenApp:
         self.targets_frame = tk.Frame(self.left_panel, bg=PANEL_BG)
         self.targets_frame.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
 
-        bars_w = self._screen_w - self._list_width
+        bars_w = self._screen_w - self._list_width - self._hint_strip_w
         self.bars = AudioBarsWidget(self.root, width=bars_w, height=content_h)
         self.bars.place(
             x=self._list_width,
@@ -129,9 +134,55 @@ class FullscreenApp:
             height=content_h,
         )
 
+        self._build_plate_button_hints(content_h)
+
+    def _build_plate_button_hints(self, content_h: int) -> None:
+        """Labels on the right edge, aligned with the physical plate button column."""
+        hint_font = material_font(11, weight="bold")
+        slot_count = 5  # Adafruit plate: 5 buttons top-to-bottom
+        x = self._screen_w - self._hint_strip_w
+        slot_h = content_h / slot_count
+
+        for slot, label in zip(self._plate_hint_slots, self._plate_hint_labels):
+            y = self._header_h + int(slot * slot_h)
+            tk.Label(
+                self.root,
+                text=label,
+                fg=ON_SURFACE_VARIANT,
+                bg=PANEL_BG,
+                font=hint_font,
+                width=2,
+                anchor="center",
+            ).place(x=x, y=y, width=self._hint_strip_w, height=int(slot_h))
+
     def _bind_events(self) -> None:
         self.root.bind("<Escape>", lambda _e: self.shutdown())
         self.root.protocol("WM_DELETE_WINDOW", self.shutdown)
+        self._bind_pitft_keys()
+
+    def _bind_pitft_keys(self) -> None:
+        """PiTFT plate buttons (gpio-keys) and keyboard equivalents."""
+        self.root.bind("<Up>", lambda _e: self._scroll_focus(-1))
+        self.root.bind("<Down>", lambda _e: self._scroll_focus(1))
+        self.root.bind("<Return>", lambda _e: self._select_focused())
+        self.root.bind("<KP_Enter>", lambda _e: self._select_focused())
+        self.root.bind("<Left>", lambda _e: self.refresh_targets())
+        self.root.bind("<KP_Left>", lambda _e: self.refresh_targets())
+        # Plate button #1 is sometimes wired differently on clones — keep F5 as refresh too.
+        self.root.bind("<F5>", lambda _e: self.refresh_targets())
+
+    def _scroll_focus(self, delta: int) -> None:
+        if not self.targets:
+            return
+        if self._focus_index is None:
+            self._focus_index = 0
+        else:
+            self._focus_index = max(0, min(len(self.targets) - 1, self._focus_index + delta))
+        self._apply_target_styles()
+
+    def _select_focused(self) -> None:
+        if self._focus_index is not None and self._focus_index < len(self.targets):
+            self._on_target_tap(self._focus_index)
 
     def _apply_target_styles(self) -> None:
         for idx, btn in enumerate(self._target_buttons):
@@ -140,7 +191,12 @@ class FullscreenApp:
                 and idx < len(self.targets)
                 and self.targets[idx].uuid == self._active_uuid
             )
+            is_focused = (
+                self._focus_index is not None
+                and idx == self._focus_index
+            )
             btn.set_active(is_active)
+            btn.set_focused(is_focused)
 
     def _on_target_tap(self, index: int) -> None:
         if index >= len(self.targets):
@@ -212,7 +268,7 @@ class FullscreenApp:
         if active_name is not None:
             self._set_subtitle(f"Playing on {active_name}", SUCCESS_FG)
         elif self.targets:
-            self._set_subtitle("Tap to play")
+            self._set_subtitle("Tap or plate buttons")
         else:
             self._set_subtitle("Searching for speakers…")
 
@@ -226,6 +282,13 @@ class FullscreenApp:
         if signature != self._targets_signature:
             self._targets_signature = signature
             self._rebuild_target_buttons()
+            if self.targets:
+                if self._focus_index is None or self._focus_index >= len(self.targets):
+                    self._focus_index = 0
+            else:
+                self._focus_index = None
+        elif self.targets and self._focus_index is not None:
+            self._focus_index = min(self._focus_index, len(self.targets) - 1)
 
         # Drop active highlight if that speaker disappeared from the network.
         if self._active_uuid is not None and self._active_target_name() is None:
@@ -267,7 +330,7 @@ class FullscreenApp:
         self._active_uuid = None
         self._apply_target_styles()
         if self.targets:
-            self._set_subtitle("Tap to play")
+            self._set_subtitle("Tap to play · ↑↓ scroll · ← refresh · Enter select")
         else:
             self._set_subtitle("Stopped")
 
