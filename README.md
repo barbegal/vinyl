@@ -79,6 +79,7 @@ Check logs:
 
 ```bash
 sudo journalctl -u pi-audio-cast-display.service -f
+./scripts/diagnose_boot.sh
 ```
 
 **Run manually** (on the Pi display):

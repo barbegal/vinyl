@@ -28,5 +28,10 @@ fi
 systemctl enable --now display-manager.service 2>/dev/null || \
   systemctl enable --now lightdm.service 2>/dev/null || true
 
+if systemctl list-unit-files getty@tty1.service 2>/dev/null | grep -q getty; then
+  systemctl enable getty@tty1.service 2>/dev/null || true
+  echo "  enabled getty@tty1"
+fi
+
 echo ""
 echo "Desktop restore configured. Reboot: sudo reboot"

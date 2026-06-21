@@ -43,6 +43,28 @@ if systemctl list-unit-files plymouth-quit-wait.service 2>/dev/null | grep -q pl
   echo "  disabled plymouth-quit-wait"
 fi
 
+# Our xinit owns tty1 — getty on tty1 causes SIGHUP / VT fights.
+if systemctl list-unit-files getty@tty1.service 2>/dev/null | grep -q getty; then
+  systemctl disable --now getty@tty1.service 2>/dev/null || true
+  echo "  disabled getty@tty1 (cast app uses tty1)"
+fi
+
+# Allow the app user to start X without a desktop login session.
+XWRAPPER="/etc/X11/Xwrapper.config"
+if [[ -f "$XWRAPPER" ]] || [[ -d /etc/X11 ]]; then
+  cat > "$XWRAPPER" <<'EOF'
+allowed_users=anybody
+needs_root_rights=yes
+EOF
+  echo "  configured $XWRAPPER"
+fi
+
+APP_USER="${SUDO_USER:-vinyl}"
+if id "$APP_USER" &>/dev/null; then
+  usermod -aG video,tty,input "$APP_USER" 2>/dev/null || true
+  echo "  added $APP_USER to video,tty,input groups"
+fi
+
 echo ""
 echo "Fast boot enabled. Default target is now: $(systemctl get-default)"
 echo "Reboot to apply: sudo reboot"

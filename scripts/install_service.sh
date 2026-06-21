@@ -12,7 +12,7 @@ if [[ ! -f "$SERVICE_TEMPLATE" ]]; then
 fi
 
 chmod +x "$APP_DIR/scripts/start_app.sh" "$APP_DIR/scripts/xinitrc"
-chmod +x "$APP_DIR/scripts/enable_fast_boot.sh" "$APP_DIR/scripts/restore_desktop.sh"
+chmod +x "$APP_DIR/scripts/enable_fast_boot.sh" "$APP_DIR/scripts/restore_desktop.sh" "$APP_DIR/scripts/diagnose_boot.sh"
 
 echo "=== Fast boot: disabling Raspberry Pi Desktop ==="
 sudo "$APP_DIR/scripts/enable_fast_boot.sh"

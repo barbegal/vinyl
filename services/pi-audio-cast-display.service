@@ -2,23 +2,19 @@
 Description=Pi Audio Cast Display (minimal X, no desktop)
 After=network.target sound.target
 Wants=network.target
-Before=display-manager.service lightdm.service
-Conflicts=display-manager.service lightdm.service
+Before=display-manager.service lightdm.service getty@tty1.service
+Conflicts=display-manager.service lightdm.service getty@tty1.service
 
 [Service]
 Type=simple
-User=@RUN_USER@
-WorkingDirectory=@APP_DIR@
+# openvt needs root to switch VT; xinit/app run as the app user.
+User=root
 Environment=HOME=/home/@RUN_USER@
 Environment=PYTHONUNBUFFERED=1
 EnvironmentFile=-@APP_DIR@/.env
-ExecStart=/usr/bin/xinit @APP_DIR@/scripts/xinitrc -- :0 vt1 -keeptty -nocursor
-Restart=always
-RestartSec=3
-TTYPath=/dev/tty1
-TTYReset=yes
-TTYVHangup=yes
-StandardInput=tty
+ExecStart=/usr/bin/openvt -u @RUN_USER@ -f -c 1 -s -w -- /usr/bin/xinit @APP_DIR@/scripts/xinitrc -- :0 vt1 -keeptty -nocursor
+Restart=on-failure
+RestartSec=5
 StandardOutput=journal
 StandardError=journal
 

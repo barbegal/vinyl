@@ -1,4 +1,7 @@
 #!/bin/sh
 # Minimal X session: only the cast app (no desktop).
 APP_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+export DISPLAY="${DISPLAY:-:0}"
+export HOME="${HOME:-/home/vinyl}"
+export XAUTHORITY="${XAUTHORITY:-$HOME/.Xauthority}"
 exec "$APP_DIR/scripts/start_app.sh"
