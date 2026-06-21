@@ -153,6 +153,39 @@ sudo /home/vinyl/Desktop/vinyl/scripts/restore_desktop.sh
 sudo reboot
 ```
 
+## Mirror the TFT remotely (Raspberry Pi Connect / VNC)
+
+The kiosk renders to an Xorg session on `:0` (the SPI framebuffer `/dev/fb1`). Raspberry Pi
+Connect's **screen sharing only captures Wayland desktops**, so it can't show this X11/fbdev
+session directly. To mirror the **exact TFT**, we attach `x11vnc` to `:0` and keep Raspberry Pi
+Connect enabled for remote shell + device management (and to tunnel the VNC port).
+
+```bash
+cd /home/vinyl/Desktop/vinyl
+sudo ./scripts/setup_rpconnect.sh
+rpi-connect signin            # one time; approve at https://connect.raspberrypi.com
+sudo reboot
+```
+
+This installs `x11vnc` + `rpi-connect`, enables the Connect user service, and sets
+`VINYL_MIRROR_VNC=1` in `.env`. After reboot, the `~/.xinitrc` session starts the mirror.
+
+View the exact TFT from another machine (localhost-only by default — tunnel it):
+
+```bash
+ssh -L 5900:localhost:5900 vinyl@<pi-host>
+# then point any VNC viewer at localhost:5900
+```
+
+For direct LAN access instead, set in `.env` and reboot:
+
+```bash
+VINYL_VNC_LOCALHOST=0
+VINYL_VNC_PASSWORD=yourpass   # recommended when exposed on the LAN
+```
+
+Check status (rp connect / vnc section): `./scripts/diagnose_boot.sh`. Mirror log: `~/.vinyl-vnc.log`.
+
 ## Generate UI screenshots
 
 ```bash

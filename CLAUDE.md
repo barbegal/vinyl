@@ -35,17 +35,25 @@ Set `PLATE_BUTTONS_SIDE=left|right` in `.env` to match your rotation.
 
 ### Secondary: mirror to Raspberry Pi Connect
 
-The user also wants the **same UI visible remotely via [Raspberry Pi Connect](https://www.raspberrypi.com/software/connect/)** (rp connect / `rpi-connect`), not only on the physical TFT.
+The user also wants the **same UI visible remotely** (alongside [Raspberry Pi Connect](https://www.raspberrypi.com/software/connect/) / `rpi-connect`), not only on the physical TFT.
+
+**How it works here:** the kiosk renders to an **Xorg `:0` session on `/dev/fb1`**. Raspberry Pi
+Connect's *screen sharing* only captures **Wayland** desktops, so it cannot show this X11/fbdev
+session directly. Instead we **mirror the exact TFT with `x11vnc` attached to `:0`**, and keep
+`rpi-connect` enabled for remote shell + device management (and to tunnel the VNC port).
+
+Set up with `scripts/setup_rpconnect.sh` (installs `x11vnc` + `rpi-connect`, enables the Connect
+user service, sets `VINYL_MIRROR_VNC=1`). The mirror is launched from `~/.xinitrc` after X starts.
 
 **Implications for changes:**
 
 - The local display is a small SPI framebuffer X session, not the normal Pi desktop or HDMI KMS stack.
-- Fast-boot kiosk mode disables the desktop (`multi-user.target`, lightdm masked) — Pi Connect screen sharing may not see the TFT session unless `rpi-connect` is enabled and pointed at the running X display (`DISPLAY=:0` on fb1).
-- When proposing display or boot changes, consider **both** outputs: PiTFT must keep working on `/dev/fb1`, and Pi Connect should still be able to mirror or share that session for remote debugging.
+- Fast-boot kiosk mode disables the desktop (`multi-user.target`, lightdm masked); the mirror is `x11vnc` on `:0`, **not** Connect's Wayland screen-share.
+- When proposing display or boot changes, consider **both** outputs: PiTFT must keep working on `/dev/fb1`, and `x11vnc`/Connect must still be able to mirror that `:0` session.
 - Avoid solutions that only work on HDMI or that require re-enabling the full Raspberry Pi Desktop unless the user asks.
-- Prefer keeping `rpi-connect` / `rpi-connect-wayvnc` (or equivalent) available alongside the kiosk path when adding mirroring support.
+- `.env`: `VINYL_MIRROR_VNC`, `VINYL_VNC_PORT`, `VINYL_VNC_LOCALHOST`, `VINYL_VNC_PASSWORD`.
 
-If mirroring is broken, check: `systemctl status rpi-connect`, whether X is on `:0`, and whether Connect is sharing the correct display (not a blank desktop that was disabled).
+If mirroring is broken, check: `./scripts/diagnose_boot.sh` (rp connect / vnc section), `systemctl --user status rpi-connect`, whether X is on `:0`, and `~/.vinyl-vnc.log`.
 
 ## Boot architecture (current)
 
@@ -120,6 +128,7 @@ If `ui visible on tft` exceeds the SLO, check: slow SD card, extra `systemd` uni
 | `scripts/install_service.sh` | Full kiosk install (name is legacy — no systemd app unit) |
 | `scripts/setup_pitft.sh` | Overlay, fbdev X, evdev touch, splash off |
 | `scripts/setup_pitft_buttons.sh` | GPIO plate buttons |
+| `scripts/setup_rpconnect.sh` | Remote mirror: x11vnc on `:0` + enable rpi-connect |
 | `scripts/enable_fast_boot.sh` | Desktop off, autologin, profile.d, calls setup_pitft |
 | `scripts/recover_display.sh` | Recovery → capacitive overlay |
 | `scripts/flip_display.sh` | Toggle rotation 90 ↔ 270 |

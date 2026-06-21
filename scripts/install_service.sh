@@ -38,6 +38,7 @@ chmod +x "$APP_DIR/scripts/start_app.sh" \
          "$APP_DIR/scripts/refresh_xinitrc.sh" \
          "$APP_DIR/scripts/flip_display.sh" \
          "$APP_DIR/scripts/setup_pitft_buttons.sh" \
+         "$APP_DIR/scripts/setup_rpconnect.sh" \
          "$APP_DIR/scripts/show_boot_error.py" \
          "$APP_DIR/scripts/boot_milestone.sh" \
          "$APP_DIR/scripts/kiosk_xinitrc.sh"

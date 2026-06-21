@@ -104,5 +104,20 @@ else
 fi
 
 echo ""
+echo "=== remote mirror (rp connect / vnc) ==="
+if command -v rpi-connect >/dev/null 2>&1; then
+  echo "rpi-connect: installed"
+  rpi-connect status 2>/dev/null | sed 's/^/  /' || echo "  (run: rpi-connect status / rpi-connect signin)"
+else
+  echo "rpi-connect: NOT installed — run ./scripts/setup_rpconnect.sh"
+fi
+if command -v x11vnc >/dev/null 2>&1; then
+  echo "x11vnc: installed (VINYL_MIRROR_VNC=${VINYL_MIRROR_VNC:-unset})"
+else
+  echo "x11vnc: NOT installed — run ./scripts/setup_rpconnect.sh"
+fi
+pgrep -a x11vnc 2>/dev/null | sed 's/^/  /' || echo "  x11vnc: not running"
+
+echo ""
 echo "=== last X errors ==="
 tail -n 25 "$USER_HOME/.local/share/xorg/Xorg.0.log" 2>/dev/null | grep -E '\(EE\)|\(WW\)' || echo "(no recent EE/WW lines)"

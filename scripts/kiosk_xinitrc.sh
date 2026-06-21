@@ -6,11 +6,35 @@ LOG="${HOME}/.vinyl-xsession.log"
 # shellcheck source=boot_milestone.sh
 . "$APP_DIR/scripts/boot_milestone.sh"
 
+# Load .env so remote-mirror settings (VINYL_MIRROR_VNC etc.) are available here.
+if [ -f "$APP_DIR/.env" ]; then
+  set -a
+  # shellcheck source=/dev/null
+  . "$APP_DIR/.env"
+  set +a
+fi
+
 boot_milestone_reset
 boot_milestone "xsession start"
 echo "=== vinyl xsession $(date) ===" >>"$LOG"
 boot_milestone "startx invoked xinitrc"
 echo "Vinyl: X session starting…" >/dev/tty1 2>/dev/null || true
+
+# Optional: mirror this TFT X session (:0) for remote viewing via Raspberry Pi
+# Connect / VNC. Enable with scripts/setup_rpconnect.sh (sets VINYL_MIRROR_VNC=1).
+if [ "${VINYL_MIRROR_VNC:-0}" = "1" ] && command -v x11vnc >/dev/null 2>&1; then
+  boot_milestone "starting x11vnc mirror"
+  VNC_ARGS="-display :0 -forever -shared -noxdamage -repeat -bg -rfbport ${VINYL_VNC_PORT:-5900} -o ${HOME}/.vinyl-vnc.log"
+  [ "${VINYL_VNC_LOCALHOST:-1}" = "1" ] && VNC_ARGS="$VNC_ARGS -localhost"
+  if [ -n "${VINYL_VNC_PASSWORD:-}" ]; then
+    VNC_ARGS="$VNC_ARGS -passwd ${VINYL_VNC_PASSWORD}"
+  else
+    VNC_ARGS="$VNC_ARGS -nopw"
+  fi
+  # shellcheck disable=SC2086
+  x11vnc $VNC_ARGS >>"$LOG" 2>&1 || echo "x11vnc mirror failed to start" >>"$LOG"
+fi
+
 if bash "$APP_DIR/scripts/start_app.sh" >>"$LOG" 2>&1; then
   exit 0
 fi
