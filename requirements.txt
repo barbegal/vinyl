@@ -1,0 +1,5 @@
+numpy==2.3.1
+Pillow==11.2.1
+pychromecast==14.0.5
+sounddevice==0.5.2
+zeroconf==0.147.0
