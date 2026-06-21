@@ -8,6 +8,7 @@ TEMPLATE="$APP_DIR/scripts/kiosk_xinitrc.sh"
 
 sed "s|@APP_DIR@|$APP_DIR|g" "$TEMPLATE" > "$USER_HOME/.xinitrc"
 chmod +x "$USER_HOME/.xinitrc"
+chmod +x "$APP_DIR/scripts/start_app.sh"
 echo "Updated $USER_HOME/.xinitrc"
 
 LOG="$USER_HOME/.vinyl-xsession.log"

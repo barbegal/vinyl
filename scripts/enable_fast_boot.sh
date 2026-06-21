@@ -78,7 +78,7 @@ cat > /etc/profile.d/vinyl-kiosk.sh <<EOF
 if [ "\$(tty 2>/dev/null)" = "/dev/tty1" ] \\
    && [ -z "\${DISPLAY:-}" ] \\
    && [ "\$(id -un)" = "$APP_USER" ] \\
-   && [ -x "$APP_DIR/scripts/start_app.sh" ]; then
+   && [ -f "$APP_DIR/scripts/start_app.sh" ]; then
   # PiTFT is an SPI framebuffer; tell Xorg to render to it.
   [ -e /dev/fb1 ] && export FRAMEBUFFER=/dev/fb1
   exec startx

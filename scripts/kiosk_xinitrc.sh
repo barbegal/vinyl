@@ -5,7 +5,7 @@ APP_DIR="@APP_DIR@"
 LOG="${HOME}/.vinyl-xsession.log"
 
 echo "=== vinyl xsession $(date) ===" >>"$LOG"
-if "$APP_DIR/scripts/start_app.sh" >>"$LOG" 2>&1; then
+if bash "$APP_DIR/scripts/start_app.sh" >>"$LOG" 2>&1; then
   exit 0
 fi
 
