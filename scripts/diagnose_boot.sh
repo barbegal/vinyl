@@ -12,8 +12,8 @@ echo ""
 echo "=== installed service ==="
 if [[ -f "$SERVICE_PATH" ]]; then
   grep -E '^(ExecStart|ExecStartPre|User)=' "$SERVICE_PATH" || true
-  if grep -q openvt "$SERVICE_PATH"; then
-    echo "WARNING: service uses openvt (broken under systemd) — git pull and ./scripts/install_service.sh"
+  if grep -qE '^ExecStart=.*openvt' "$SERVICE_PATH"; then
+    echo "WARNING: service ExecStart uses openvt (broken under systemd) — git pull and reinstall"
   fi
 else
   echo "no $SERVICE_PATH — run ./scripts/install_service.sh"

@@ -49,8 +49,8 @@ sed \
 sudo cp "$TMP_FILE" "$SERVICE_PATH"
 sudo chmod 644 "$SERVICE_PATH"
 
-if grep -q openvt "$SERVICE_PATH"; then
-  echo "ERROR: service still references openvt — git pull and retry"
+if grep -qE '^ExecStart=.*openvt' "$SERVICE_PATH"; then
+  echo "ERROR: installed service still uses openvt in ExecStart — update repo and retry"
   exit 1
 fi
 

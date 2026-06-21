@@ -14,7 +14,7 @@ WorkingDirectory=@APP_DIR@
 Environment=HOME=/home/@RUN_USER@
 Environment=PYTHONUNBUFFERED=1
 EnvironmentFile=-@APP_DIR@/.env
-# openvt fails under systemd (no controlling tty). Switch VT as root, then xinit as app user.
+# Switch VT via chvt (systemd has no controlling tty). xinit runs as app user on vt7.
 ExecStartPre=+/bin/chvt 7
 ExecStart=/usr/bin/xinit @APP_DIR@/scripts/xinitrc -- :0 vt7 -keeptty -nocursor
 Restart=on-failure
