@@ -18,8 +18,20 @@ echo "Removing tty1 autologin override..."
 rm -f /etc/systemd/system/getty@tty1.service.d/autologin.conf
 rmdir /etc/systemd/system/getty@tty1.service.d 2>/dev/null || true
 
-echo "Removing startx guard from $USER_HOME/.bash_profile..."
+echo "Removing kiosk profile hook..."
+rm -f /etc/profile.d/vinyl-kiosk.sh
+
+echo "Unmasking display managers..."
+for svc in lightdm.service display-manager.service; do
+  systemctl unmask "$svc" 2>/dev/null || true
+done
+
+echo "Removing startx guard from profile files..."
 PROFILE="$USER_HOME/.bash_profile"
+if [[ -f "$PROFILE" ]]; then
+  sed -i '/# >>> pi-audio-cast-display startx >>>/,/# <<< pi-audio-cast-display startx <<</d' "$PROFILE"
+fi
+PROFILE="$USER_HOME/.profile"
 if [[ -f "$PROFILE" ]]; then
   sed -i '/# >>> pi-audio-cast-display startx >>>/,/# <<< pi-audio-cast-display startx <<</d' "$PROFILE"
 fi

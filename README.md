@@ -68,20 +68,49 @@ sudo reboot
 
 The installer:
 
-- installs `xinit` / `xserver-xorg`
+- installs `xinit` / `xserver-xorg` (+ `fbdev`/`evdev` for the PiTFT)
 - sets the boot target to `multi-user.target` and disables the desktop
 - enables **tty1 autologin** for your user
-- writes `~/.xinitrc` (runs the app) and a `startx` guard in `~/.bash_profile`
+- writes `~/.xinitrc` (runs the app) and `startx` guards in `~/.profile` / `~/.bash_profile`
+- points Xorg at the PiTFT (`/etc/X11/xorg.conf.d/99-pitft.conf` → `/dev/fb1`) and exports `FRAMEBUFFER=/dev/fb1`
+- sets the PiTFT overlay rotation + touch calibration via `scripts/setup_pitft.sh`
 - removes any old `pi-audio-cast-display.service`
 
 After reboot you should see only the cast UI on the touchscreen — no desktop.
 
-Verify / troubleshoot:
+### Adafruit 2.8" PiTFT notes (capacitive 28c / resistive 28r)
+
+The PiTFT is an **SPI framebuffer** (`/dev/fb1`), not HDMI/KMS. Rotation lives in the
+`config.txt` overlay (`dtoverlay=pitft28-…,rotate=…`), not `xrandr`. The display setup is
+the same for both panels; only the touch controller differs:
+
+- **Capacitive (28c)** — FT6206 over **I²C** (installer enables I²C automatically)
+- **Resistive (28r)** — STMPE over SPI
+
+The installer defaults to capacitive. To force a panel/rotation, set env vars:
 
 ```bash
-./scripts/diagnose_boot.sh
-systemctl get-default          # multi-user.target
+PITFT_TYPE=28c PITFT_ROTATE=270 ./scripts/install_service.sh
 ```
+
+If `/dev/fb1` is missing, run the official Adafruit installer once to add the overlay,
+console mapping, and touch driver, then re-run ours:
+
+```bash
+# In a venv per Bookworm; see Adafruit's guide
+sudo -E env PATH=$PATH python3 adafruit-pitft.py --display=28c --rotation=270 --install-type=console
+```
+
+If the image is upside down, flip the rotation and reboot:
+
+```bash
+sudo ./scripts/setup_pitft.sh 90 28c    # rotation then panel
+sudo reboot
+```
+
+Touch uses a rotation-aware `CalibrationMatrix` matched via `MatchIsTouchscreen` (works for
+either controller). If taps land in the wrong place, confirm the device with `xinput list`,
+re-run `setup_pitft.sh` with the matching rotation, or use the Adafruit installer.
 
 **Run manually** (over SSH, on the Pi display):
 

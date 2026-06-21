@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Configure fast, desktop-free boot: multi-user target + tty1 autologin.
-# X is started from the login session (startx), so the user owns the VT.
+# Configure fast, desktop-free boot: multi-user target + tty1 autologin + startx.
 set -euo pipefail
 
 if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
@@ -9,6 +8,7 @@ if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
 fi
 
 APP_USER="${1:-${SUDO_USER:-vinyl}}"
+APP_DIR="${2:-/home/$APP_USER/Desktop/vinyl}"
 
 echo "Setting default boot target to multi-user (no desktop)..."
 systemctl set-default multi-user.target
@@ -24,6 +24,7 @@ DESKTOP_SERVICES=(
   rpd-wayland.service
   labwc.service
   graphical.service
+  splash.service
 )
 for svc in "${DESKTOP_SERVICES[@]}"; do
   if systemctl list-unit-files "$svc" 2>/dev/null | grep -q "$svc"; then
@@ -31,6 +32,34 @@ for svc in "${DESKTOP_SERVICES[@]}"; do
     echo "  disabled $svc"
   fi
 done
+
+# Prevent desktop from being pulled in on next enable attempt.
+for svc in lightdm.service display-manager.service; do
+  if systemctl list-unit-files "$svc" 2>/dev/null | grep -q "$svc"; then
+    systemctl mask "$svc" 2>/dev/null || true
+    echo "  masked $svc"
+  fi
+done
+
+echo "Disabling Plymouth boot splash (\"Welcome to Raspberry Pi Desktop\")..."
+PLYMOUTH_SERVICES=(
+  plymouth-start.service
+  plymouth-read-write.service
+  plymouth-quit.service
+  plymouth-quit-wait.service
+)
+for svc in "${PLYMOUTH_SERVICES[@]}"; do
+  if systemctl list-unit-files "$svc" 2>/dev/null | grep -q "$svc"; then
+    systemctl disable --now "$svc" 2>/dev/null || true
+    echo "  disabled $svc"
+  fi
+done
+
+if command -v raspi-config >/dev/null; then
+  raspi-config nonint do_boot_splash 1 2>/dev/null || true
+  raspi-config nonint do_boot_behaviour B2 2>/dev/null || true
+  echo "  raspi-config: splash off, console autologin"
+fi
 
 echo "Enabling tty1 autologin for $APP_USER..."
 OVERRIDE_DIR="/etc/systemd/system/getty@tty1.service.d"
@@ -43,7 +72,20 @@ EOF
 systemctl enable getty@tty1.service 2>/dev/null || true
 echo "  wrote $OVERRIDE_DIR/autologin.conf"
 
-# Let console users start X (default on Pi; ensure it).
+echo "Installing /etc/profile.d/vinyl-kiosk.sh (startx on tty1 login)..."
+cat > /etc/profile.d/vinyl-kiosk.sh <<EOF
+# Auto-start cast app X session on tty1 (sourced by login shells via /etc/profile).
+if [ "\$(tty 2>/dev/null)" = "/dev/tty1" ] \\
+   && [ -z "\${DISPLAY:-}" ] \\
+   && [ "\$(id -un)" = "$APP_USER" ] \\
+   && [ -x "$APP_DIR/scripts/start_app.sh" ]; then
+  # PiTFT is an SPI framebuffer; tell Xorg to render to it.
+  [ -e /dev/fb1 ] && export FRAMEBUFFER=/dev/fb1
+  exec startx
+fi
+EOF
+chmod 644 /etc/profile.d/vinyl-kiosk.sh
+
 XWRAPPER="/etc/X11/Xwrapper.config"
 if [[ -d /etc/X11 ]]; then
   cat > "$XWRAPPER" <<'EOF'
@@ -58,10 +100,9 @@ if id "$APP_USER" &>/dev/null; then
   echo "  added $APP_USER to video,render,tty,input,audio groups"
 fi
 
-# Optional: skip waiting on boot splash (faster to usable screen).
-if systemctl list-unit-files plymouth-quit-wait.service 2>/dev/null | grep -q plymouth; then
-  systemctl disable --now plymouth-quit-wait.service 2>/dev/null || true
-  echo "  disabled plymouth-quit-wait"
+if [[ -x "$APP_DIR/scripts/setup_pitft.sh" ]]; then
+  echo "Configuring Adafruit PiTFT (fb1 + rotation + touch)..."
+  "$APP_DIR/scripts/setup_pitft.sh" "${PITFT_ROTATE:-270}" "${PITFT_TYPE:-28c}" "$APP_USER" || true
 fi
 
 systemctl daemon-reload
