@@ -92,9 +92,6 @@ class FullscreenApp:
             self.root.attributes("-topmost", False)
         except tk.TclError:
             pass
-        self._bind_events()
-        self._show_main_ui()
-        log_milestone("tk window built")
 
     def _show_main_ui(self) -> None:
         """Drop boot overlay and show the cast shell immediately."""
