@@ -53,28 +53,27 @@ Controls:
 - tap the active (green) speaker again to stop
 - `Esc`: exit app
 
-## Install boot service (fast startup, no full desktop)
+## Install boot service (fast startup — no Raspberry Pi Desktop)
 
-This starts **only X + the cast app** at boot via `multi-user.target`, instead of waiting for the full Pi desktop.
+The installer **turns off the full desktop** and boots only X + this app.
 
 ```bash
 cd /home/vinyl/Desktop/vinyl
+sudo apt install -y xinit xserver-xorg
 chmod +x scripts/install_service.sh
 ./scripts/install_service.sh
+sudo reboot
 ```
 
-**Disable the slow desktop** (pick one):
+After reboot you should **not** see the Raspberry Pi desktop — only the cast UI on the touchscreen.
+
+Verify:
 
 ```bash
-# Option A — raspi-config
-sudo raspi-config
-# System Options → Boot / Auto Login → Console Autologin
-
-# Option B — disable the display manager directly
-sudo systemctl disable --now display-manager.service
+systemctl get-default          # should say multi-user.target
+systemctl is-enabled lightdm   # should say disabled or not found
+sudo systemctl status pi-audio-cast-display.service
 ```
-
-Reboot. The touchscreen should show the cast app without loading the full desktop.
 
 Check logs:
 
@@ -82,25 +81,18 @@ Check logs:
 sudo journalctl -u pi-audio-cast-display.service -f
 ```
 
-**Run manually** (same as the service, on the Pi display):
+**Run manually** (on the Pi display):
 
 ```bash
 cd /home/vinyl/Desktop/vinyl
 ./scripts/start_app.sh
 ```
 
-Or with a minimal X session (no desktop):
-
-```bash
-xinit /home/vinyl/Desktop/vinyl/scripts/xinitrc -- :0 vt1 -keeptty
-```
-
 **Restore the normal Pi desktop:**
 
 ```bash
-sudo systemctl disable --now pi-audio-cast-display.service
-sudo systemctl enable --now display-manager.service
-sudo raspi-config   # Boot / Auto Login → Desktop Autologin
+sudo /home/vinyl/Desktop/vinyl/scripts/restore_desktop.sh
+sudo reboot
 ```
 
 ## Generate UI screenshots

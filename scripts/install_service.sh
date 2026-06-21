@@ -12,6 +12,10 @@ if [[ ! -f "$SERVICE_TEMPLATE" ]]; then
 fi
 
 chmod +x "$APP_DIR/scripts/start_app.sh" "$APP_DIR/scripts/xinitrc"
+chmod +x "$APP_DIR/scripts/enable_fast_boot.sh" "$APP_DIR/scripts/restore_desktop.sh"
+
+echo "=== Fast boot: disabling Raspberry Pi Desktop ==="
+sudo "$APP_DIR/scripts/enable_fast_boot.sh"
 
 TMP_FILE="$(mktemp)"
 trap 'rm -f "$TMP_FILE"' EXIT
@@ -27,11 +31,11 @@ sudo systemctl daemon-reload
 sudo systemctl enable pi-audio-cast-display.service
 sudo systemctl restart pi-audio-cast-display.service
 
-echo "Installed pi-audio-cast-display.service (boots at multi-user.target, no full desktop)."
 echo ""
-echo "For fastest boot, disable desktop autologin:"
-echo "  sudo raspi-config  → System Options → Boot / Auto Login → Console Autologin"
-echo "  or: sudo systemctl disable --now display-manager.service"
+echo "=== Cast app service installed ==="
+echo "Default boot target: $(systemctl get-default)"
+echo "Service status:      sudo systemctl status pi-audio-cast-display.service"
+echo "Logs:                sudo journalctl -u pi-audio-cast-display.service -f"
 echo ""
-echo "Check status: sudo systemctl status pi-audio-cast-display.service"
-echo "View logs:    sudo journalctl -u pi-audio-cast-display.service -f"
+echo "Reboot now for fastest startup: sudo reboot"
+echo "Restore desktop:    sudo $APP_DIR/scripts/restore_desktop.sh"

@@ -1,10 +1,9 @@
 [Unit]
 Description=Pi Audio Cast Display (minimal X, no desktop)
-After=network-online.target sound.target
-Wants=network-online.target
-# Start before the full desktop so we can own the display.
-Before=display-manager.service
-Conflicts=display-manager.service
+After=network.target sound.target
+Wants=network.target
+Before=display-manager.service lightdm.service
+Conflicts=display-manager.service lightdm.service
 
 [Service]
 Type=simple
