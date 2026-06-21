@@ -4,7 +4,7 @@ Fullscreen Raspberry Pi app that:
 
 - starts on boot with `systemd`
 - monitors USB audio input and renders live audio bars on a 320x240 touchscreen
-- discovers Google Cast devices (prefers speaker groups)
+- discovers Google Cast speaker groups and individual speakers
 - streams live USB input to selected target via Chromecast using local HLS
 
 ## Project layout
@@ -23,7 +23,7 @@ Fullscreen Raspberry Pi app that:
 
 ```bash
 sudo apt update
-sudo apt install -y python3-venv python3-tk ffmpeg portaudio19-dev
+sudo apt install -y python3-venv python3-tk ffmpeg portaudio19-dev fonts-roboto
 ```
 
 ## Setup
@@ -90,6 +90,6 @@ If speakers show in Google Home but not in this app:
 3. Increase scan time in `.env`: `CAST_DISCOVERY_TIMEOUT=20`
 4. If mDNS is blocked on your router, set speaker IPs in `.env`:
    `CAST_KNOWN_HOSTS=192.168.1.50,192.168.1.51`
-5. To list individual speakers instead of only groups: `GOOGLE_GROUPS_ONLY=false`
+5. To hide individual speakers and show only groups: `GOOGLE_GROUPS_ONLY=true`
 
 Cast connection requires the full device record from mDNS (including dynamic ports for speaker groups). Older code that connected by IP alone could not reach groups like those on your network.
