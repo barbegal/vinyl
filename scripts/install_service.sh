@@ -38,6 +38,7 @@ chmod +x "$APP_DIR/scripts/start_app.sh" \
          "$APP_DIR/scripts/refresh_xinitrc.sh" \
          "$APP_DIR/scripts/flip_display.sh" \
          "$APP_DIR/scripts/setup_pitft_buttons.sh" \
+         "$APP_DIR/scripts/show_boot_error.py" \
          "$APP_DIR/scripts/kiosk_xinitrc.sh"
 
 echo "=== Removing any old systemd unit ==="
@@ -49,7 +50,7 @@ echo "=== Configuring fast boot + tty1 autologin + profile.d startx ==="
 sudo "$APP_DIR/scripts/enable_fast_boot.sh" "$USER_NAME" "$APP_DIR"
 
 echo "=== Writing $USER_HOME/.xinitrc ==="
-sed "s|@APP_DIR@|$APP_DIR|g" "$XINITRC_TEMPLATE" > "$USER_HOME/.xinitrc"
+./scripts/refresh_xinitrc.sh
 chmod +x "$USER_HOME/.xinitrc"
 
 STARTX_GUARD='

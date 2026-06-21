@@ -343,16 +343,22 @@ class FullscreenApp:
         self.root.after(80, self._update_audio_ui)
 
     def run(self) -> None:
+        # Paint the window before network/audio work — otherwise the TFT stays black
+        # until mainloop() runs (discovery used to block here).
+        self.root.update_idletasks()
+        self.root.update()
+
+        self._update_audio_ui()
+        self.root.after(50, self._startup)
+        self.root.mainloop()
+
+    def _startup(self) -> None:
         input_ok = self.listener.start()
         if not input_ok and not self.listener.last_error:
             self._set_subtitle("No audio input", ERROR)
 
-        # First scan is quick (the browser is still warming up); the periodic
-        # auto-refresh keeps filling the list as more speakers respond.
         self.refresh_targets(announce=False)
         self._auto_after_id = self.root.after(self._refresh_ms, self._auto_refresh)
-        self._update_audio_ui()
-        self.root.mainloop()
 
     def shutdown(self) -> None:
         if self._auto_after_id is not None:

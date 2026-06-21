@@ -102,7 +102,7 @@ fi
 
 if [[ -x "$APP_DIR/scripts/setup_pitft.sh" ]]; then
   echo "Configuring Adafruit PiTFT (fb1 + rotation + touch)..."
-  "$APP_DIR/scripts/setup_pitft.sh" "${PITFT_ROTATE:-270}" "${PITFT_TYPE:-28c}" "$APP_USER" || true
+  "$APP_DIR/scripts/setup_pitft.sh" "${PITFT_ROTATE:-90}" "${PITFT_TYPE:-28c}" "$APP_USER" || true
 fi
 
 systemctl daemon-reload

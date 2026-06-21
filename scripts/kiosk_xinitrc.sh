@@ -10,5 +10,8 @@ if bash "$APP_DIR/scripts/start_app.sh" >>"$LOG" 2>&1; then
 fi
 
 echo "start_app.sh failed — see $LOG" >>"$LOG"
-# Keep X open so the panel isn't blank-black while you SSH in to read the log.
+if [[ -x "$APP_DIR/.venv/bin/python" ]]; then
+  "$APP_DIR/.venv/bin/python" "$APP_DIR/scripts/show_boot_error.py" >>"$LOG" 2>&1 || true
+fi
+# Keep X open for SSH debugging.
 sleep 3600
