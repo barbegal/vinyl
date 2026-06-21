@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 from src.cast.errors import friendly_cast_error
 from src.cast.group_discovery import CastTarget
@@ -148,7 +148,17 @@ class ChromecastStreamController:
             str(playlist_path),
         ]
 
-    def start_stream(self, target: CastTarget, zconf=None, cast_info=None) -> bool:
+    def start_stream(
+        self,
+        target: CastTarget,
+        zconf=None,
+        cast_info=None,
+        on_status: Optional[Callable[[str], None]] = None,
+    ) -> bool:
+        def say(message: str) -> None:
+            if on_status is not None:
+                on_status(message)
+
         self.stop_stream()
 
         if pychromecast is None or get_chromecast_from_cast_info is None:
@@ -167,18 +177,21 @@ class ChromecastStreamController:
             return False
 
         try:
+            say(f"Connecting to {target.name}…")
             self._chromecast = get_chromecast_from_cast_info(
                 info,
                 zconf=zconf,
-                tries=3,
-                timeout=20.0,
-                retry_wait=2.0,
+                tries=2,
+                timeout=12.0,
+                retry_wait=1.5,
             )
-            self._chromecast.wait(timeout=20)
+            say("Waiting for speaker…")
+            self._chromecast.wait(timeout=12.0)
 
             self._hls_root = Path(tempfile.mkdtemp(prefix="pi-audio-hls-"))
             playlist = self._hls_root / "live.m3u8"
 
+            say("Starting audio stream…")
             cmd = self._build_ffmpeg_cmd(playlist)
             self._ffmpeg_proc = subprocess.Popen(
                 cmd,
@@ -200,9 +213,10 @@ class ChromecastStreamController:
 
             stream_url = f"http://{host_ip}:{self.settings.hls_http_port}/live.m3u8"
 
+            say("Sending to speaker…")
             media_controller = self._chromecast.media_controller
             media_controller.play_media(stream_url, "application/vnd.apple.mpegurl")
-            media_controller.block_until_active(timeout=20)
+            media_controller.block_until_active(timeout=12)
 
             self._set_status(True, target.name, "Streaming", stream_url)
             return True
@@ -248,4 +262,4 @@ class ChromecastStreamController:
                 pass
         self._hls_root = None
 
-        self._set_status(False, "", "Stopped")
+        # Do not set status here — callers set success/error messages after cleanup.

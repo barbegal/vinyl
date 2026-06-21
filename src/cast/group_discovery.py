@@ -135,9 +135,10 @@ class CastGroupDiscovery:
             deduped[target.uuid] = target
         filtered = self._filter_targets(list(deduped.values()), self.groups_only)
 
-        if not filtered and devices:
+        if devices and not filtered:
             self.last_error = (
-                f"Found {len(devices)} device(s) but none matched the filter"
+                f"Found {len(devices)} on LAN but filter hid them "
+                "(set GOOGLE_GROUPS_ONLY=false in .env)"
             )
 
         return filtered

@@ -26,7 +26,7 @@ def main() -> None:
     if settings.cast_known_hosts:
         print(f"Known hosts: {', '.join(settings.cast_known_hosts)}")
 
-    targets = discovery.discover()
+    targets = discovery.discover(wait_seconds=settings.cast_discovery_timeout)
 
     if discovery.last_error:
         print(f"Note: {discovery.last_error}")

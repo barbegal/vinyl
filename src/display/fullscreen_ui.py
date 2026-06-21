@@ -64,6 +64,8 @@ class FullscreenApp:
         self._plate_on_left = settings.plate_buttons_side == "left"
         self._plate_hint_widgets: list[tk.Label] = []
         self._pitft_keys_bound = False
+        self._cast_busy = False
+        self._scan_busy = False
 
         self._boot_debug = boot_debug
         self._network_poll_id: str | None = None
@@ -107,7 +109,6 @@ class FullscreenApp:
             self._boot_debug = None
         self._set_subtitle("Starting…")
         self.root.update_idletasks()
-        self.root.update()
         self._ensure_input_focus()
 
     def _ensure_audio(self) -> None:
@@ -384,18 +385,75 @@ class FullscreenApp:
     def _on_target_tap(self, index: int) -> None:
         if index >= len(self.targets):
             return
-
-        self._ensure_cast_stack()
-
-        tapped_uuid = self.targets[index].uuid
-        if self._active_uuid is not None and tapped_uuid == self._active_uuid:
-            self.stop_cast()
+        if self._cast_busy:
+            self._post_status("Still connecting…")
             return
 
-        if self._active_uuid is not None:
-            self.controller.stop_stream()
+        self._cast_busy = True
+        target = self.targets[index]
+        self._post_status(f"Connecting to {target.name}…")
 
-        self._start_cast_to(index)
+        import threading
+
+        threading.Thread(
+            target=self._tap_worker,
+            args=(index,),
+            daemon=True,
+        ).start()
+
+    def _tap_worker(self, index: int) -> None:
+        try:
+            self._ensure_cast_stack()
+            tapped_uuid = self.targets[index].uuid
+
+            if self._active_uuid is not None and tapped_uuid == self._active_uuid:
+                if self.controller is not None:
+                    self.controller.stop_stream()
+                self.root.after(0, self._finish_stop_cast_ui)
+                return
+
+            if self._active_uuid is not None and self.controller is not None:
+                self.controller.stop_stream()
+
+            target = self.targets[index]
+            fresh_info = self.discovery.fresh_cast_info(target)
+            ok = self.controller.start_stream(
+                target,
+                zconf=self.discovery.zconf,
+                cast_info=fresh_info,
+                on_status=self._post_status,
+            )
+            status = self.controller.status
+            self.root.after(0, lambda: self._finish_cast_ui(index, ok, status))
+        except Exception as exc:
+            err = str(exc)
+            self.root.after(0, lambda: self._finish_cast_error(err))
+
+    def _finish_cast_ui(self, index: int, ok: bool, status) -> None:
+        self._cast_busy = False
+        target = self.targets[index]
+        if ok:
+            self._active_uuid = target.uuid
+            self._apply_target_styles()
+            self._set_subtitle(f"Playing on {status.target_name}", SUCCESS_FG)
+        else:
+            self._active_uuid = None
+            self._apply_target_styles()
+            msg = status.message if status and status.message else "Cast failed — tap ↻"
+            self._set_subtitle(msg, ERROR)
+            log_milestone(f"cast connect failed: {msg}")
+
+    def _finish_cast_error(self, err: str) -> None:
+        self._cast_busy = False
+        self._active_uuid = None
+        self._apply_target_styles()
+        self._set_subtitle(err, ERROR)
+
+    def _finish_stop_cast_ui(self) -> None:
+        self._cast_busy = False
+        self._active_uuid = None
+        self._apply_target_styles()
+        self._set_subtitle(self._idle_subtitle if self.targets else "No speakers — tap ↻")
 
     def _rebuild_target_buttons(self) -> None:
         for child in self.targets_frame.winfo_children():
@@ -435,6 +493,10 @@ class FullscreenApp:
         self.subtitle_var.set(text)
         self.subtitle_label.configure(fg=color)
 
+    def _post_status(self, text: str, color: str = ON_SURFACE_VARIANT) -> None:
+        """Thread-safe status line — schedules Tk update, never blocks mainloop."""
+        self.root.after(0, lambda t=text, c=color: self._set_subtitle(t, c))
+
     @staticmethod
     def _signature(targets: list[CastTarget]) -> tuple:
         return tuple((t.uuid, t.name, t.is_group) for t in targets)
@@ -470,10 +532,46 @@ class FullscreenApp:
 
         self._ensure_cast()
         if announce:
-            self._set_subtitle("Scanning…")
+            if self._scan_busy:
+                self._post_status("Still scanning…")
+                return
+            self._post_status("Scanning…")
+            self._scan_busy = True
+            import threading
 
-        wait = self.settings.cast_discovery_timeout if announce else 0.0
-        self.targets = self.discovery.discover(wait_seconds=wait)
+            threading.Thread(
+                target=self._refresh_worker,
+                daemon=True,
+            ).start()
+            return
+
+        self._apply_refresh_targets(self.discovery.discover(wait_seconds=0.0))
+
+    def _refresh_worker(self) -> None:
+        import time
+
+        deadline = time.time() + self.settings.cast_discovery_timeout
+        best: list["CastTarget"] = []
+        try:
+            while time.time() < deadline:
+                current = self.discovery.discover(wait_seconds=0.0)
+                if len(current) > len(best):
+                    best = list(current)
+                count = len(best)
+                self._post_status(f"Scanning… ({count} found)")
+                time.sleep(0.4)
+            if not best:
+                best = self.discovery.discover(wait_seconds=0.0)
+        except Exception:
+            best = []
+        self.root.after(0, lambda t=best: self._finish_refresh(t))
+
+    def _finish_refresh(self, targets: list["CastTarget"]) -> None:
+        self._scan_busy = False
+        self._apply_refresh_targets(targets)
+
+    def _apply_refresh_targets(self, targets: list["CastTarget"]) -> None:
+        self.targets = targets
         signature = self._signature(self.targets)
 
         if signature != self._targets_signature:
@@ -487,7 +585,6 @@ class FullscreenApp:
         elif self.targets and self._focus_index is not None:
             self._focus_index = min(self._focus_index, len(self.targets) - 1)
 
-        # Drop active highlight if that speaker disappeared from the network.
         if self._active_uuid is not None and self._active_target_name() is None:
             self._active_uuid = None
 
@@ -498,66 +595,15 @@ class FullscreenApp:
         self.refresh_targets(announce=False)
         self._auto_after_id = self.root.after(self._refresh_ms, self._auto_refresh)
 
-    def _start_cast_to(self, index: int) -> None:
-        if index >= len(self.targets):
-            return
-
-        self._ensure_cast_stack()
-        self._set_subtitle("Connecting...")
-        self.root.update_idletasks()
-
+    def stop_cast(self) -> None:
         import threading
 
-        threading.Thread(
-            target=self._start_cast_worker,
-            args=(index,),
-            daemon=True,
-        ).start()
+        threading.Thread(target=self._stop_cast_worker, daemon=True).start()
 
-    def _start_cast_worker(self, index: int) -> None:
-        target = self.targets[index]
-        try:
-            fresh_info = self.discovery.fresh_cast_info(target)
-            ok = self.controller.start_stream(
-                target,
-                zconf=self.discovery.zconf,
-                cast_info=fresh_info,
-            )
-            status = self.controller.status
-        except Exception as exc:
-            ok = False
-            status = None
-            err = str(exc)
-
-            def _fail() -> None:
-                self._active_uuid = None
-                self._apply_target_styles()
-                self._set_subtitle(err, ERROR)
-
-            self.root.after(0, _fail)
-            return
-
-        def _done() -> None:
-            if ok:
-                self._active_uuid = target.uuid
-                self._apply_target_styles()
-                self._set_subtitle(f"Playing on {status.target_name}", SUCCESS_FG)
-            else:
-                self._active_uuid = None
-                self._apply_target_styles()
-                self._set_subtitle(status.message, ERROR)
-
-        self.root.after(0, _done)
-
-    def stop_cast(self) -> None:
+    def _stop_cast_worker(self) -> None:
         if self.controller is not None:
             self.controller.stop_stream()
-        self._active_uuid = None
-        self._apply_target_styles()
-        if self.targets:
-            self._set_subtitle(self._idle_subtitle)
-        else:
-            self._set_subtitle("Stopped")
+        self.root.after(0, self._finish_stop_cast_ui)
 
     def _update_audio_ui(self) -> None:
         rms_linear = 0.0
@@ -702,9 +748,11 @@ class FullscreenApp:
             else:
                 self._focus_index = None
 
-        if error:
+        if error and not self.targets:
             self._set_subtitle(error, ERROR)
             log_milestone(f"cast err: {error}")
+        elif error:
+            log_milestone(f"cast note: {error}")
         else:
             log_milestone(f"first cast scan ({len(self.targets)} target(s))")
 
