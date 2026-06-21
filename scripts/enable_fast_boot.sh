@@ -30,23 +30,13 @@ for svc in "${DESKTOP_SERVICES[@]}"; do
   fi
 done
 
-# Console autologin (no desktop) via raspi-config when available.
-if command -v raspi-config >/dev/null; then
-  echo "Setting boot behaviour to console autologin (raspi-config)..."
-  raspi-config nonint do_boot_behaviour B2 2>/dev/null || \
-    raspi-config nonint do_boot_behaviour B4 2>/dev/null || true
-fi
+# Do not use raspi-config B2 (console autologin) — it keeps getty@tty1 active on tty1.
+# X runs on vt7 via the service; tty1 can stay for emergency console + SSH.
 
 # Optional: skip waiting on boot splash (faster to usable screen).
 if systemctl list-unit-files plymouth-quit-wait.service 2>/dev/null | grep -q plymouth; then
   systemctl disable --now plymouth-quit-wait.service 2>/dev/null || true
   echo "  disabled plymouth-quit-wait"
-fi
-
-# Our xinit owns tty1 — getty on tty1 causes SIGHUP / VT fights.
-if systemctl list-unit-files getty@tty1.service 2>/dev/null | grep -q getty; then
-  systemctl disable --now getty@tty1.service 2>/dev/null || true
-  echo "  disabled getty@tty1 (cast app uses tty1)"
 fi
 
 # Allow the app user to start X without a desktop login session.
