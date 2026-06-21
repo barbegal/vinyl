@@ -56,6 +56,54 @@ No systemd X service — that path failed (VT ownership, permission errors).
 
 Install / refresh: `scripts/install_service.sh`, `scripts/enable_fast_boot.sh`, `scripts/refresh_xinitrc.sh`.
 
+## Boot timing (design targets)
+
+Kiosk mode skips the Raspberry Pi Desktop, Plymouth splash, and display manager. Expect a **blank TFT during early boot** (kernel + systemd on console) — that is normal; the UI appears when X + Python start.
+
+### Estimated timeline (power → milestone)
+
+Times use **kernel uptime** (`/proc/uptime`) — seconds since the kernel started, not wall clock.
+
+| Milestone | Pi 4 (SD, Wi‑Fi) | Pi 5 (SD, Wi‑Fi) | Notes |
+|-----------|------------------|------------------|-------|
+| `multi-user.target` (SSH up) | ~20–35s | ~15–25s | No desktop; faster than graphical boot |
+| `xsession start` / Xorg on fb1 | +2–5s | +2–4s | After tty1 autologin + `startx` |
+| **`ui visible on tft`** | **~30–45s** | **~22–35s** | Split layout + “Searching for speakers…” |
+| `audio input ready` | +0–2s after UI | +0–2s | USB sound card enumerate can lag |
+| `first cast scan` | +1–8s after UI | +1–6s | mDNS; may show 0–1 targets initially |
+| Full speaker list | +6–20s after UI | +6–15s | Auto-refresh every `CAST_REFRESH_INTERVAL` (default 6s) |
+
+**Rough totals from power:**
+
+- **Interactive UI on TFT** — target **≤45s** (Pi 4), **≤35s** (Pi 5). This is the primary SLO.
+- **Cast list “useful”** (most speakers listed) — target **≤60s** (Pi 4), **≤45s** (Pi 5). Non-blocking; UI is already tappable.
+- **Compared to full desktop** — previously ~90–120s+ to a usable desktop; kiosk path is materially faster.
+
+Cast discovery and Wi‑Fi association run **after** the first paint and must not block the TFT (deferred via `root.after()` in `fullscreen_ui.run()`).
+
+### Measuring on the Pi
+
+After each boot, milestones are appended to `~/.vinyl-boot.log`:
+
+```bash
+cat ~/.vinyl-boot.log
+./scripts/diagnose_boot.sh   # includes timing summary
+```
+
+Example log:
+
+```text
+  28.40s  xsession start
+  28.42s  startx invoked xinitrc
+  29.10s  start_app.sh
+  32.55s  tk window built
+  33.02s  ui visible on tft
+  33.80s  audio input ready
+  38.20s  first cast scan (2 target(s))
+```
+
+If `ui visible on tft` exceeds the SLO, check: slow SD card, extra `systemd` units, Wi‑Fi driver delay, Xorg errors, or Python import time (venv on SD).
+
 ## Key scripts
 
 | Script | Purpose |

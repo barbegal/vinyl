@@ -84,5 +84,25 @@ pgrep -a Xorg 2>/dev/null | sed 's/^/  /' || echo "  Xorg: not running"
 pgrep -af 'src.main' 2>/dev/null | sed 's/^/  /' || echo "  cast app: not running"
 
 echo ""
+echo "=== boot timing (last reboot) ==="
+BOOT_LOG="$USER_HOME/.vinyl-boot.log"
+if [[ -f "$BOOT_LOG" ]]; then
+  sed 's/^/  /' "$BOOT_LOG"
+  ui_line="$(grep 'ui visible on tft' "$BOOT_LOG" | tail -1)"
+  if [[ -n "$ui_line" ]]; then
+    ui_s="${ui_line%%s*}"
+    if awk "BEGIN {exit !($ui_s <= 35)}"; then
+      echo "  → UI target met (≤35s on Pi 5 class)"
+    elif awk "BEGIN {exit !($ui_s <= 45)}"; then
+      echo "  → UI within Pi 4 target (≤45s)"
+    else
+      echo "  → UI slower than 45s target — check SD card, Wi-Fi, services"
+    fi
+  fi
+else
+  echo "  no $BOOT_LOG yet (reboot once after install)"
+fi
+
+echo ""
 echo "=== last X errors ==="
 tail -n 25 "$USER_HOME/.local/share/xorg/Xorg.0.log" 2>/dev/null | grep -E '\(EE\)|\(WW\)' || echo "(no recent EE/WW lines)"

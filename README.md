@@ -79,6 +79,12 @@ The installer:
 
 After reboot you should see only the cast UI on the touchscreen — no desktop.
 
+**How long should boot take?** With desktop disabled, expect a blank TFT for the first ~20–30s
+(kernel/systemd). The cast UI should appear in about **30–45s on a Pi 4** or **22–35s on a Pi 5**
+(power → interactive touchscreen). The speaker list keeps filling for another **6–20s** via
+auto-refresh — that does not block the UI. Milestones are logged to `~/.vinyl-boot.log`; run
+`./scripts/diagnose_boot.sh` to review them.
+
 ### Adafruit 2.8" PiTFT notes (capacitive 28c / resistive 28r)
 
 The PiTFT is an **SPI framebuffer** (`/dev/fb1`), not HDMI/KMS. Rotation lives in the

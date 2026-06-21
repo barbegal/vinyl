@@ -4,6 +4,10 @@ set -euo pipefail
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$APP_DIR"
 
+# shellcheck source=boot_milestone.sh
+. "$APP_DIR/scripts/boot_milestone.sh"
+boot_milestone "start_app.sh"
+
 if [[ ! -f "$APP_DIR/.venv/bin/python" ]]; then
   echo "Missing venv at $APP_DIR/.venv — run: python3 -m venv .venv && pip install -r requirements.txt"
   exit 1

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tkinter as tk
 
+from src.boot_timing import log_milestone
 from src.audio.input_listener import AudioInputListener
 from src.cast.group_discovery import CastGroupDiscovery, CastTarget
 from src.cast.stream_controller import ChromecastStreamController
@@ -63,6 +64,7 @@ class FullscreenApp:
 
         self._build_layout()
         self._bind_events()
+        log_milestone("tk window built")
 
     def _build_layout(self) -> None:
         content_h = self._screen_h - self._header_h
@@ -347,6 +349,7 @@ class FullscreenApp:
         # until mainloop() runs (discovery used to block here).
         self.root.update_idletasks()
         self.root.update()
+        log_milestone("ui visible on tft")
 
         self._update_audio_ui()
         self.root.after(50, self._startup)
@@ -354,10 +357,16 @@ class FullscreenApp:
 
     def _startup(self) -> None:
         input_ok = self.listener.start()
+        log_milestone(
+            "audio input ready" if input_ok else "audio input unavailable"
+        )
         if not input_ok and not self.listener.last_error:
             self._set_subtitle("No audio input", ERROR)
 
         self.refresh_targets(announce=False)
+        log_milestone(
+            f"first cast scan ({len(self.targets)} target(s))"
+        )
         self._auto_after_id = self.root.after(self._refresh_ms, self._auto_refresh)
 
     def shutdown(self) -> None:

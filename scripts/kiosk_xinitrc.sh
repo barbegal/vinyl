@@ -3,8 +3,13 @@
 # Installed to ~/.xinitrc by install_service.sh.
 APP_DIR="@APP_DIR@"
 LOG="${HOME}/.vinyl-xsession.log"
+# shellcheck source=boot_milestone.sh
+. "$APP_DIR/scripts/boot_milestone.sh"
 
+boot_milestone_reset
+boot_milestone "xsession start"
 echo "=== vinyl xsession $(date) ===" >>"$LOG"
+boot_milestone "startx invoked xinitrc"
 if bash "$APP_DIR/scripts/start_app.sh" >>"$LOG" 2>&1; then
   exit 0
 fi
