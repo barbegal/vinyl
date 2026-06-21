@@ -57,7 +57,15 @@ run_diagnosis() {
   [[ -x "$APP_DIR/.venv/bin/python" ]] && echo "venv: ok" || echo "venv: MISSING"
 
   echo ""
-  echo "=== PiTFT / display ==="
+  echo "=== audio / cast ==="
+  if [[ -f "$APP_DIR/.env" ]]; then
+    grep -E '^USB_ALSA_DEVICE=|^GOOGLE_GROUPS_ONLY=|^CAST_DISCOVERY' "$APP_DIR/.env" 2>/dev/null | sed 's/^/  /' || true
+  fi
+  if command -v arecord >/dev/null; then
+    arecord -l 2>/dev/null | grep -E '^card |USB' | sed 's/^/  /' || echo "  (no arecord devices)"
+  fi
+  command -v ffmpeg >/dev/null && echo "ffmpeg: ok" || echo "ffmpeg: MISSING (apt install ffmpeg)"
+
   ls -la /dev/fb* /dev/dri/* 2>/dev/null | sed 's/^/  /' || echo "  (no /dev/fb* or /dev/dri/*)"
   [[ -e /dev/fb1 ]] && echo "/dev/fb1: present" || echo "/dev/fb1: MISSING — overlay not binding (see dmesg below)"
   for p in /boot/firmware/config.txt /boot/config.txt; do
