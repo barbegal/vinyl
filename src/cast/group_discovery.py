@@ -74,7 +74,12 @@ class CastGroupDiscovery:
         """Start a persistent background browser whose device list grows over time."""
         if self._started and self._browser is not None:
             return True
-        if pychromecast is None or CastBrowser is None or zeroconf_module is None:
+        if (
+            pychromecast is None
+            or CastBrowser is None
+            or SimpleCastListener is None
+            or zeroconf_module is None
+        ):
             return False
 
         self._zconf = zeroconf_module.Zeroconf()
