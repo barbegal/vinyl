@@ -30,6 +30,7 @@ class AppSettings:
 
     groups_only: bool = False
     cast_discovery_timeout: float = 12.0
+    cast_refresh_interval: float = 6.0
     cast_known_hosts: list[str] = field(default_factory=list)
 
     @classmethod
@@ -51,5 +52,6 @@ class AppSettings:
             hls_bitrate=os.getenv("HLS_BITRATE", "128k").strip(),
             groups_only=_env_bool("GOOGLE_GROUPS_ONLY", False),
             cast_discovery_timeout=float(os.getenv("CAST_DISCOVERY_TIMEOUT", "12")),
+            cast_refresh_interval=float(os.getenv("CAST_REFRESH_INTERVAL", "6")),
             cast_known_hosts=known_hosts,
         )

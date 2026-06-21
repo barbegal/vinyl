@@ -8,16 +8,17 @@ from uuid import UUID
 try:
     import pychromecast
     from pychromecast.const import CAST_TYPE_GROUP
-    from pychromecast.discovery import CastBrowser, discover_chromecasts, stop_discovery
+    from pychromecast.discovery import CastBrowser, SimpleCastListener
     from pychromecast.models import CastInfo, HostServiceInfo
+    import zeroconf as zeroconf_module
 except Exception:
     pychromecast = None
     CAST_TYPE_GROUP = "group"
     CastBrowser = None
-    discover_chromecasts = None
-    stop_discovery = None
+    SimpleCastListener = None
     CastInfo = None
     HostServiceInfo = None
+    zeroconf_module = None
 
 
 @dataclass(frozen=True)
@@ -62,11 +63,30 @@ class CastGroupDiscovery:
         self.last_error: Optional[str] = None
         self._browser: Optional[CastBrowser] = None
         self._zconf = None
+        self._started = False
         self._lock = threading.Lock()
 
     @property
     def zconf(self):
         return self._zconf
+
+    def _ensure_browser(self) -> bool:
+        """Start a persistent background browser whose device list grows over time."""
+        if self._started and self._browser is not None:
+            return True
+        if pychromecast is None or CastBrowser is None or zeroconf_module is None:
+            return False
+
+        self._zconf = zeroconf_module.Zeroconf()
+        listener = SimpleCastListener()
+        known = self.known_hosts if self.known_hosts else None
+        try:
+            self._browser = CastBrowser(listener, self._zconf, known_hosts=known)
+        except TypeError:
+            self._browser = CastBrowser(listener, self._zconf)
+        self._browser.start_discovery()
+        self._started = True
+        return True
 
     @staticmethod
     def _from_cast_info(cast_info: CastInfo) -> CastTarget:
@@ -83,43 +103,43 @@ class CastGroupDiscovery:
         return sorted(targets, key=lambda t: (not t.is_group, t.name.lower()))
 
     def _stop_browser(self) -> None:
-        if self._browser is not None and stop_discovery is not None:
+        if self._browser is not None:
             try:
-                stop_discovery(self._browser)
+                self._browser.stop_discovery()
             except Exception:
                 pass
         self._browser = None
+        if self._zconf is not None:
+            try:
+                self._zconf.close()
+            except Exception:
+                pass
+        self._zconf = None
+        self._started = False
 
     def discover(self) -> list[CastTarget]:
+        """Non-blocking read of the persistent browser's accumulated devices."""
         self.last_error = None
-        if pychromecast is None or discover_chromecasts is None:
+        if pychromecast is None or CastBrowser is None:
             self.last_error = "Run: pip install -r requirements.txt"
             return []
 
         with self._lock:
-            self._stop_browser()
             try:
-                hosts = self.known_hosts if self.known_hosts else None
-                devices, browser = discover_chromecasts(
-                    timeout=self.discovery_timeout,
-                    known_hosts=hosts,
-                )
-                self._browser = browser
-                self._zconf = browser.zc
+                if not self._ensure_browser():
+                    self.last_error = "Run: pip install -r requirements.txt"
+                    return []
 
-                targets = [self._from_cast_info(device) for device in devices]
+                devices = list(self._browser.devices.values())
                 deduped: dict[str, CastTarget] = {}
-                for target in targets:
+                for device in devices:
+                    target = self._from_cast_info(device)
                     deduped[target.uuid] = target
                 filtered = self._filter_targets(list(deduped.values()), self.groups_only)
 
                 if not filtered and devices:
                     self.last_error = (
                         f"Found {len(devices)} device(s) but none matched the filter"
-                    )
-                elif not filtered:
-                    self.last_error = (
-                        "No Cast devices on network — check Wi-Fi and Google Home setup"
                     )
 
                 return filtered

@@ -47,9 +47,12 @@ class FullscreenApp:
         self.controller = ChromecastStreamController(settings=settings)
         self.targets: list[CastTarget] = []
         self._target_buttons: list[MaterialButton] = []
-        self._active_index: int | None = None
+        self._active_uuid: str | None = None
+        self._targets_signature: tuple | None = None
+        self._auto_after_id: str | None = None
+        self._refresh_ms = max(2000, int(settings.cast_refresh_interval * 1000))
 
-        self.subtitle_var = tk.StringVar(value="Starting...")
+        self.subtitle_var = tk.StringVar(value="Searching for speakers…")
         self._header_h = 34
         self._top_btn_slot = 58
 
@@ -132,17 +135,23 @@ class FullscreenApp:
 
     def _apply_target_styles(self) -> None:
         for idx, btn in enumerate(self._target_buttons):
-            btn.set_active(self._active_index is not None and idx == self._active_index)
+            is_active = (
+                self._active_uuid is not None
+                and idx < len(self.targets)
+                and self.targets[idx].uuid == self._active_uuid
+            )
+            btn.set_active(is_active)
 
     def _on_target_tap(self, index: int) -> None:
         if index >= len(self.targets):
             return
 
-        if self._active_index is not None and index == self._active_index:
+        tapped_uuid = self.targets[index].uuid
+        if self._active_uuid is not None and tapped_uuid == self._active_uuid:
             self.stop_cast()
             return
 
-        if self._active_index is not None:
+        if self._active_uuid is not None:
             self.controller.stop_stream()
 
         self._start_cast_to(index)
@@ -185,30 +194,49 @@ class FullscreenApp:
         self.subtitle_var.set(text)
         self.subtitle_label.configure(fg=color)
 
-    def refresh_targets(self) -> None:
-        was_active = self._active_index
-        self._set_subtitle("Scanning...")
+    @staticmethod
+    def _signature(targets: list[CastTarget]) -> tuple:
+        return tuple((t.uuid, t.name, t.is_group) for t in targets)
+
+    def _active_target_name(self) -> str | None:
+        for target in self.targets:
+            if target.uuid == self._active_uuid:
+                return target.name
+        return None
+
+    def _update_status_text(self) -> None:
+        if self.discovery.last_error and not self.targets:
+            self._set_subtitle(self.discovery.last_error, ERROR)
+            return
+        active_name = self._active_target_name()
+        if active_name is not None:
+            self._set_subtitle(f"Playing on {active_name}", SUCCESS_FG)
+        elif self.targets:
+            self._set_subtitle("Tap to play")
+        else:
+            self._set_subtitle("Searching for speakers…")
+
+    def refresh_targets(self, announce: bool = True) -> None:
+        if announce:
+            self._set_subtitle("Scanning…")
 
         self.targets = self.discovery.discover()
-        self._rebuild_target_buttons()
+        signature = self._signature(self.targets)
 
-        if self.discovery.last_error:
-            self._set_subtitle(self.discovery.last_error, ERROR)
-            self._active_index = None
-        elif self.targets:
-            if was_active is not None and was_active < len(self.targets):
-                self._active_index = was_active
-            self._apply_target_styles()
-            if self._active_index is not None:
-                self._set_subtitle(
-                    f"Playing on {self.targets[self._active_index].name}",
-                    SUCCESS_FG,
-                )
-            else:
-                self._set_subtitle("Tap to play")
-        else:
-            self._set_subtitle("Tap ↻ to scan")
-            self._active_index = None
+        if signature != self._targets_signature:
+            self._targets_signature = signature
+            self._rebuild_target_buttons()
+
+        # Drop active highlight if that speaker disappeared from the network.
+        if self._active_uuid is not None and self._active_target_name() is None:
+            self._active_uuid = None
+
+        self._apply_target_styles()
+        self._update_status_text()
+
+    def _auto_refresh(self) -> None:
+        self.refresh_targets(announce=False)
+        self._auto_after_id = self.root.after(self._refresh_ms, self._auto_refresh)
 
     def _start_cast_to(self, index: int) -> None:
         if index >= len(self.targets):
@@ -226,17 +254,17 @@ class FullscreenApp:
         )
         status = self.controller.status
         if ok:
-            self._active_index = index
+            self._active_uuid = target.uuid
             self._apply_target_styles()
             self._set_subtitle(f"Playing on {status.target_name}", SUCCESS_FG)
         else:
-            self._active_index = None
+            self._active_uuid = None
             self._apply_target_styles()
             self._set_subtitle(status.message, ERROR)
 
     def stop_cast(self) -> None:
         self.controller.stop_stream()
-        self._active_index = None
+        self._active_uuid = None
         self._apply_target_styles()
         if self.targets:
             self._set_subtitle("Tap to play")
@@ -256,11 +284,20 @@ class FullscreenApp:
         if not input_ok and not self.listener.last_error:
             self._set_subtitle("No audio input", ERROR)
 
-        self.refresh_targets()
+        # First scan is quick (the browser is still warming up); the periodic
+        # auto-refresh keeps filling the list as more speakers respond.
+        self.refresh_targets(announce=False)
+        self._auto_after_id = self.root.after(self._refresh_ms, self._auto_refresh)
         self._update_audio_ui()
         self.root.mainloop()
 
     def shutdown(self) -> None:
+        if self._auto_after_id is not None:
+            try:
+                self.root.after_cancel(self._auto_after_id)
+            except Exception:
+                pass
+            self._auto_after_id = None
         self.controller.stop_stream()
         self.listener.stop()
         self.discovery.shutdown()

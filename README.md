@@ -112,6 +112,23 @@ Touch uses a rotation-aware `CalibrationMatrix` matched via `MatchIsTouchscreen`
 either controller). If taps land in the wrong place, confirm the device with `xinput list`,
 re-run `setup_pitft.sh` with the matching rotation, or use the Adafruit installer.
 
+**Touch not working / unsure which controller?** Detect the actual hardware:
+
+```bash
+sudo ./scripts/detect_touch.sh
+```
+
+It scans I²C (capacitive FT6206 sits at `0x38`), checks the loaded overlay and kernel input
+devices, and prints the exact fix command. Then apply it, e.g.:
+
+```bash
+sudo ./scripts/setup_pitft.sh 270 28c   # capacitive  (or 28r for resistive)
+sudo reboot
+```
+
+`setup_pitft.sh` switches the overlay touch variant (`pitft28-capacitive` ↔
+`pitft28-resistive`) to match — the display is identical either way, so this is safe.
+
 **Run manually** (over SSH, on the Pi display):
 
 ```bash

@@ -42,14 +42,20 @@ for p in /boot/firmware/config.txt /boot/config.txt; do
   [[ -f "$p" ]] && { CONFIG_TXT="$p"; break; }
 done
 
+DESIRED_BASE="pitft28-capacitive"
+[[ "$PANEL" == "28r" ]] && DESIRED_BASE="pitft28-resistive"
+
 if [[ -n "$CONFIG_TXT" ]]; then
   if grep -qE '^dtoverlay=pitft28' "$CONFIG_TXT"; then
-    if grep -qE '^dtoverlay=pitft28.*rotate=' "$CONFIG_TXT"; then
-      sed -i -E "/^dtoverlay=pitft28/ s/rotate=[0-9]+/rotate=${ROTATE}/" "$CONFIG_TXT"
+    # Switch the overlay touch variant to match the actual controller.
+    sed -i -E "/^dtoverlay=pitft28/ s/pitft28[a-zA-Z-]*/${DESIRED_BASE}/" "$CONFIG_TXT"
+    echo "  set overlay to ${DESIRED_BASE}"
+    if grep -qE "^dtoverlay=${DESIRED_BASE}.*rotate=" "$CONFIG_TXT"; then
+      sed -i -E "/^dtoverlay=${DESIRED_BASE}/ s/rotate=[0-9]+/rotate=${ROTATE}/" "$CONFIG_TXT"
     else
-      sed -i -E "/^dtoverlay=pitft28/ s/$/,rotate=${ROTATE}/" "$CONFIG_TXT"
+      sed -i -E "/^dtoverlay=${DESIRED_BASE}/ s/$/,rotate=${ROTATE}/" "$CONFIG_TXT"
     fi
-    echo "  set PiTFT overlay rotate=${ROTATE} in $CONFIG_TXT"
+    echo "  set rotate=${ROTATE}"
     if grep -qE '^disable_splash=' "$CONFIG_TXT"; then
       sed -i 's/^disable_splash=.*/disable_splash=1/' "$CONFIG_TXT"
     else
@@ -57,10 +63,16 @@ if [[ -n "$CONFIG_TXT" ]]; then
     fi
     echo "  set disable_splash=1"
   else
-    echo "  WARNING: no 'dtoverlay=pitft28...' line in $CONFIG_TXT."
-    echo "           Run the Adafruit installer once to add the overlay + fb1 + touch:"
-    echo "           https://learn.adafruit.com/adafruit-pitft-28-inch-resistive-touchscreen-display-raspberry-pi/easy-install-2"
-    echo "           sudo -E env PATH=\$PATH python3 adafruit-pitft.py --display=${PANEL} --rotation=${ROTATE} --install-type=console"
+    echo "  No 'dtoverlay=pitft28...' line found — adding ${DESIRED_BASE}."
+    {
+      echo ""
+      echo "# Adafruit PiTFT (added by setup_pitft.sh)"
+      echo "dtparam=spi=on"
+      [[ "$PANEL" == "28c" ]] && echo "dtparam=i2c_arm=on"
+      echo "dtoverlay=${DESIRED_BASE},rotate=${ROTATE},speed=32000000,fps=25"
+      echo "disable_splash=1"
+    } >> "$CONFIG_TXT"
+    echo "  appended overlay + params to $CONFIG_TXT"
   fi
 else
   echo "  WARNING: config.txt not found on /boot"
