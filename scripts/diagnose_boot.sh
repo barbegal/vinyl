@@ -58,14 +58,19 @@ run_diagnosis() {
 
   echo ""
   echo "=== PiTFT / display ==="
-  ls -la /dev/fb* 2>/dev/null | sed 's/^/  /' || echo "  (no /dev/fb*)"
-  [[ -e /dev/fb1 ]] && echo "/dev/fb1: present" || echo "/dev/fb1: MISSING — overlay not loaded; reboot after setup_pitft"
+  ls -la /dev/fb* /dev/dri/* 2>/dev/null | sed 's/^/  /' || echo "  (no /dev/fb* or /dev/dri/*)"
+  [[ -e /dev/fb1 ]] && echo "/dev/fb1: present" || echo "/dev/fb1: MISSING — overlay not binding (see dmesg below)"
   for p in /boot/firmware/config.txt /boot/config.txt; do
     if [[ -f "$p" ]]; then
       echo "$p:"
-      grep -E '^(dtoverlay=pitft|dtparam=spi|disable_splash)=' "$p" 2>/dev/null | sed 's/^/  /' || echo "  (no pitft line)"
+      grep -E '^(dtoverlay=pitft|dtparam=spi|dtparam=i2c|dtoverlay=vc4|disable_splash)' "$p" 2>/dev/null | sed 's/^/  /' || echo "  (no pitft line)"
+      grep -qE '^dtparam=spi=on' "$p" 2>/dev/null || echo "  WARNING: no 'dtparam=spi=on' — pitft overlay CANNOT bind → no /dev/fb1"
       if grep -qE '^dtoverlay=pitft28.*drm' "$p" 2>/dev/null; then
         echo "  WARNING: overlay has ,drm — black TFT. Run: bash scripts/recover.sh --display"
+      fi
+      if grep -qE '^dtoverlay=vc4-kms-v3d' "$p" 2>/dev/null; then
+        echo "  NOTE: vc4-kms-v3d (full KMS) is on — can fight SPI fbdev (FBIOPUTCMAP busy / black TFT even when fb1 exists)."
+        echo "        If fb1 exists but TFT is black, try 'vc4-fkms-v3d' instead, or add 'fbcon=map:10' to cmdline.txt."
       fi
       dup="$(grep -c '^disable_splash=' "$p" 2>/dev/null || echo 0)"
       [[ "$dup" -gt 1 ]] && echo "  WARNING: duplicate disable_splash lines — run: sudo ./scripts/setup_pitft.sh 270 28r"
