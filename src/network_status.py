@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import fcntl
 import socket
+import struct
 from pathlib import Path
 
 
@@ -28,8 +30,29 @@ def is_iface_link_up(iface: str) -> bool:
     return state in {"up", "dormant", "unknown"}
 
 
+def _iface_has_ipv4(iface: str) -> bool:
+    """True when the interface has a non-loopback IPv4 address."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        packed = fcntl.ioctl(
+            sock.fileno(),
+            0x8915,  # SIOCGIFADDR
+            struct.pack("256s", iface.encode("utf-8")[:15]),
+        )
+        ip = socket.inet_ntoa(packed[20:24])
+        return bool(ip and not ip.startswith("127."))
+    except OSError:
+        return False
+    finally:
+        sock.close()
+
+
 def is_lan_ready(timeout: float = 0.35) -> bool:
-    """True when the Pi has a routable path off the LAN (Wi‑Fi or Ethernet)."""
+    """True when the Pi has a usable LAN address (Cast does not need internet)."""
+    for iface in ("wlan0", "eth0"):
+        if _iface_has_ipv4(iface):
+            return True
+
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         sock.settimeout(timeout)

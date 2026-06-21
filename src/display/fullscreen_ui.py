@@ -65,21 +65,33 @@ class FullscreenApp:
 
         self.root.title("Pi Audio Cast Display")
         self.root.configure(bg="#0a0c12")
-        # Always pin the window to the panel size and go fullscreen — even when
-        # reusing the boot-debug root or running under a bare X server with no
-        # window manager (where the window would otherwise default to a small
-        # square in the top-left corner).
-        self.root.geometry(f"{self._screen_w}x{self._screen_h}+0+0")
-        if settings.fullscreen:
-            self.root.attributes("-fullscreen", True)
-            self.root.update_idletasks()
-            # Bare startx has no WM to honor _NET_WM_STATE_FULLSCREEN; force the
-            # override-redirect geometry so the UI fills /dev/fb1 regardless.
-            if self.root.winfo_width() < self._screen_w or self.root.winfo_height() < self._screen_h:
-                self.root.overrideredirect(True)
-                self.root.geometry(f"{self._screen_w}x{self._screen_h}+0+0")
+        self._apply_fullscreen_window()
 
         self._build_layout()
+        self._bind_events()
+        self._show_main_ui()
+        log_milestone("tk window built")
+
+    def _apply_fullscreen_window(self) -> None:
+        """Pin the Tk root to the full PiTFT — bare startx has no window manager."""
+        self.root.geometry(f"{self._screen_w}x{self._screen_h}+0+0")
+        self.root.minsize(self._screen_w, self._screen_h)
+        self.root.maxsize(self._screen_w, self._screen_h)
+        if self.settings.fullscreen:
+            self.root.attributes("-fullscreen", True)
+        self.root.overrideredirect(True)
+        self.root.update_idletasks()
+        self.root.geometry(f"{self._screen_w}x{self._screen_h}+0+0")
+
+    def _ensure_input_focus(self) -> None:
+        try:
+            self.root.lift()
+            self.root.attributes("-topmost", True)
+            self.root.focus_force()
+            self.root.focus_set()
+            self.root.attributes("-topmost", False)
+        except tk.TclError:
+            pass
         self._bind_events()
         self._show_main_ui()
         log_milestone("tk window built")
@@ -93,6 +105,7 @@ class FullscreenApp:
         self._set_subtitle("Starting…")
         self.root.update_idletasks()
         self.root.update()
+        self._ensure_input_focus()
 
     def _ensure_audio(self) -> None:
         if self.listener is not None:
@@ -259,14 +272,17 @@ class FullscreenApp:
 
     def _bind_pitft_keys(self) -> None:
         """PiTFT plate buttons (gpio-keys) and keyboard equivalents."""
-        self.root.bind("<Up>", lambda _e: self._scroll_focus(-1))
-        self.root.bind("<Down>", lambda _e: self._scroll_focus(1))
-        self.root.bind("<Return>", lambda _e: self._select_focused())
-        self.root.bind("<KP_Enter>", lambda _e: self._select_focused())
-        self.root.bind("<Left>", lambda _e: self.refresh_targets())
-        self.root.bind("<KP_Left>", lambda _e: self.refresh_targets())
-        # Plate button #1 is sometimes wired differently on clones — keep F5 as refresh too.
-        self.root.bind("<F5>", lambda _e: self.refresh_targets())
+        bindings = {
+            "<Up>": lambda _e: self._scroll_focus(-1),
+            "<Down>": lambda _e: self._scroll_focus(1),
+            "<Return>": lambda _e: self._select_focused(),
+            "<KP_Enter>": lambda _e: self._select_focused(),
+            "<Left>": lambda _e: self.refresh_targets(),
+            "<KP_Left>": lambda _e: self.refresh_targets(),
+            "<F5>": lambda _e: self.refresh_targets(),
+        }
+        for seq, handler in bindings.items():
+            self.root.bind_all(seq, handler, add="+")
 
     def _scroll_focus(self, delta: int) -> None:
         if not self.targets:
@@ -419,22 +435,48 @@ class FullscreenApp:
         self._set_subtitle("Connecting...")
         self.root.update_idletasks()
 
+        import threading
+
+        threading.Thread(
+            target=self._start_cast_worker,
+            args=(index,),
+            daemon=True,
+        ).start()
+
+    def _start_cast_worker(self, index: int) -> None:
         target = self.targets[index]
-        fresh_info = self.discovery.fresh_cast_info(target)
-        ok = self.controller.start_stream(
-            target,
-            zconf=self.discovery.zconf,
-            cast_info=fresh_info,
-        )
-        status = self.controller.status
-        if ok:
-            self._active_uuid = target.uuid
-            self._apply_target_styles()
-            self._set_subtitle(f"Playing on {status.target_name}", SUCCESS_FG)
-        else:
-            self._active_uuid = None
-            self._apply_target_styles()
-            self._set_subtitle(status.message, ERROR)
+        try:
+            fresh_info = self.discovery.fresh_cast_info(target)
+            ok = self.controller.start_stream(
+                target,
+                zconf=self.discovery.zconf,
+                cast_info=fresh_info,
+            )
+            status = self.controller.status
+        except Exception as exc:
+            ok = False
+            status = None
+            err = str(exc)
+
+            def _fail() -> None:
+                self._active_uuid = None
+                self._apply_target_styles()
+                self._set_subtitle(err, ERROR)
+
+            self.root.after(0, _fail)
+            return
+
+        def _done() -> None:
+            if ok:
+                self._active_uuid = target.uuid
+                self._apply_target_styles()
+                self._set_subtitle(f"Playing on {status.target_name}", SUCCESS_FG)
+            else:
+                self._active_uuid = None
+                self._apply_target_styles()
+                self._set_subtitle(status.message, ERROR)
+
+        self.root.after(0, _done)
 
     def stop_cast(self) -> None:
         if self.controller is not None:
@@ -463,6 +505,7 @@ class FullscreenApp:
         log_milestone("ui visible on tft")
         self._update_audio_ui()
         self.root.after(50, self._begin_background_startup)
+        self.root.after(150, self._ensure_input_focus)
         self.root.mainloop()
 
     def _begin_background_startup(self) -> None:

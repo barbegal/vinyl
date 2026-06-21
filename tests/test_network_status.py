@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from src.network_status import is_iface_link_up, network_status_line
+from src.network_status import is_iface_link_up, is_lan_ready, network_status_line
 
 
 class TestNetworkStatus(unittest.TestCase):
@@ -15,6 +15,9 @@ class TestNetworkStatus(unittest.TestCase):
     def test_iface_link_up_unknown_state(self) -> None:
         # On dev machines wlan0/eth0 may be absent; should not raise.
         self.assertIsInstance(is_iface_link_up("wlan0"), bool)
+
+    def test_is_lan_ready_returns_bool(self) -> None:
+        self.assertIsInstance(is_lan_ready(), bool)
 
 
 if __name__ == "__main__":

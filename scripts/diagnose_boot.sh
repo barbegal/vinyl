@@ -74,6 +74,13 @@ run_diagnosis() {
       fi
       dup="$(grep -c '^disable_splash=' "$p" 2>/dev/null || echo 0)"
       [[ "$dup" -gt 1 ]] && echo "  WARNING: duplicate disable_splash lines — run: sudo ./scripts/setup_pitft.sh 270 28r"
+      btn="$(grep -c '^dtoverlay=gpio-key,gpio=' "$p" 2>/dev/null || echo 0)"
+      if [[ "$btn" -eq 0 ]]; then
+        echo "  WARNING: no plate button overlays — run: sudo ./scripts/setup_pitft_buttons.sh"
+      else
+        echo "  plate buttons: $btn gpio-key overlay(s)"
+        grep '^dtoverlay=gpio-key,gpio=' "$p" 2>/dev/null | sed 's/^/    /'
+      fi
       break
     fi
   done

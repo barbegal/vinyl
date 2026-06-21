@@ -138,8 +138,10 @@ EOF
 # libinput CalibrationMatrix fights the capacitive overlay's touch-swapxy/invert flags.
 rm -f /etc/X11/xorg.conf.d/99-pitft-calibration.conf
 
-if [[ "$PANEL" == "28c" ]]; then
-  cat > /etc/X11/xorg.conf.d/99-pitft-touch.conf <<'EOF'
+write_touch_conf() {
+  local conf="/etc/X11/xorg.conf.d/99-pitft-touch.conf"
+  if [[ "$PANEL" == "28c" ]]; then
+    cat >"$conf" <<'EOF'
 Section "InputClass"
   Identifier "PiTFT capacitive touch"
   MatchIsTouchscreen "on"
@@ -147,18 +149,45 @@ Section "InputClass"
   Driver "evdev"
 EndSection
 EOF
-  echo "  touch: evdev (no libinput matrix — overlay handles rotation)"
-else
-  cat > /etc/X11/xorg.conf.d/99-pitft-touch.conf <<'EOF'
+    echo "  touch: evdev (overlay handles rotation)"
+    return
+  fi
+
+  # Resistive STMPE — overlay rotate does not remap touch; set evdev axes per rotation.
+  local cal="200 3800 200 3800"
+  local swap="" invx="" invy=""
+  case "$ROTATE" in
+    0)   cal="200 3800 200 3800" ;;
+    90)  cal="200 3800 200 3800"; swap="1"; invx="1" ;;
+    180) cal="200 3800 200 3800"; invx="1"; invy="1" ;;
+    270) cal="200 3800 200 3800"; swap="1"; invy="1" ;;
+  esac
+
+  cat >"$conf" <<EOF
 Section "InputClass"
   Identifier "PiTFT resistive touch"
   MatchProduct "stmpe"
+  MatchIsTouchscreen "on"
   MatchDevicePath "/dev/input/event*"
   Driver "evdev"
+  Option "Calibration" "$cal"
+EOF
+  if [[ -n "$swap" ]]; then
+    echo "  Option \"SwapAxes\" \"$swap\"" >>"$conf"
+  fi
+  if [[ -n "$invx" ]]; then
+    echo "  Option \"InvertX\" \"$invx\"" >>"$conf"
+  fi
+  if [[ -n "$invy" ]]; then
+    echo "  Option \"InvertY\" \"$invy\"" >>"$conf"
+  fi
+  cat >>"$conf" <<'EOF'
 EndSection
 EOF
-  echo "  touch: evdev + stmpe match"
-fi
+  echo "  touch: evdev stmpe rotate=${ROTATE} (Calibration + axis swap)"
+}
+
+write_touch_conf
 
 # Adafruit: 40-libinput.conf overrides evdev for touch — move it out of the way.
 LIBINPUT_SNIP="/usr/share/X11/xorg.conf.d/40-libinput.conf"
