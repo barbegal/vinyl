@@ -216,6 +216,7 @@ INDEX_HTML = """<!DOCTYPE html>
   }
   .speaker:active { background:var(--surface-high); }
   .speaker.active { background:var(--primary); border-color:var(--success); color:#fff; }
+  .speaker.busy { opacity:0.55; pointer-events:none; }
   .speaker .tag { font-size:11px; font-weight:700; color:var(--on-var); }
   .speaker.active .tag { color:rgba(255,255,255,.8); }
   .empty { color:var(--on-var); text-align:center; padding:28px 8px; font-weight:600; }
@@ -273,11 +274,16 @@ INDEX_HTML = """<!DOCTYPE html>
     }
   }
 
-  let sig = "";
-  function renderSpeakers(targets) {
-    const newSig = targets.map(t => t.uuid + ":" + t.active).join("|");
-    if (newSig === sig) return;
-    sig = newSig;
+  let speakersSig = "";
+  function targetsSig(targets) {
+    return (targets || []).map(
+      t => t.uuid + "|" + t.name + "|" + (t.is_group ? "1" : "0") + "|" + (t.active ? "1" : "0")
+    ).join(";");
+  }
+  function renderSpeakers(targets, busy) {
+    const newSig = targetsSig(targets) + "|b:" + (busy ? "1" : "0");
+    if (newSig === speakersSig) return;
+    speakersSig = newSig;
     speakersEl.innerHTML = "";
     if (!targets.length) {
       const e = document.createElement("div");
@@ -288,7 +294,8 @@ INDEX_HTML = """<!DOCTYPE html>
     }
     for (const t of targets) {
       const el = document.createElement("button");
-      el.className = "speaker" + (t.active ? " active" : "");
+      el.className = "speaker" + (t.active ? " active" : "") + (busy ? " busy" : "");
+      el.disabled = !!busy;
       const name = document.createElement("span");
       name.textContent = t.name;
       el.appendChild(name);
@@ -326,7 +333,9 @@ INDEX_HTML = """<!DOCTYPE html>
       const s = await res.json();
       statusEl.textContent = s.status.text;
       statusEl.className = s.status.kind;
-      renderSpeakers(s.targets || []);
+      renderSpeakers(s.targets || [], s.busy);
+      if (s.scanning) refreshBtn.classList.add("spinning");
+      else refreshBtn.classList.remove("spinning");
       history.shift();
       history.push(Math.max(0, Math.min(1, s.level || 0)));
       renderBars();
@@ -337,7 +346,7 @@ INDEX_HTML = """<!DOCTYPE html>
   }
 
   poll();
-  setInterval(poll, 200);
+  setInterval(poll, 150);
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
@@ -381,7 +390,7 @@ MANIFEST_JSON = json.dumps(
 
 # Cache the app shell so it opens instantly (even briefly offline); API calls
 # always go to the network so speaker state is never stale.
-SERVICE_WORKER_JS = """const CACHE = "vinyl-cast-v1";
+SERVICE_WORKER_JS = """const CACHE = "vinyl-cast-v2";
 const SHELL = ["/", "/manifest.webmanifest", "/icon.svg", "/icon-maskable.svg"];
 
 self.addEventListener("install", (event) => {

@@ -56,6 +56,25 @@ def _local_ip_for_lan() -> str:
     return "127.0.0.1"
 
 
+class _HlsHandler(SimpleHTTPRequestHandler):
+    """Serve HLS files; Chromecasts often drop connections mid-segment."""
+
+    def log_message(self, *_args) -> None:
+        return
+
+    def handle_one_request(self) -> None:
+        try:
+            super().handle_one_request()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
+    def do_GET(self) -> None:
+        try:
+            super().do_GET()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
+
 class _HlsServer:
     def __init__(self, root: Path, host: str, port: int) -> None:
         self.root = root
@@ -65,8 +84,9 @@ class _HlsServer:
         self._thread: Optional[threading.Thread] = None
 
     def start(self) -> None:
-        handler = partial(SimpleHTTPRequestHandler, directory=str(self.root))
+        handler = partial(_HlsHandler, directory=str(self.root))
         self._server = ThreadingHTTPServer((self.host, self.port), handler)
+        self._server.daemon_threads = True
         self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
         self._thread.start()
 
@@ -125,9 +145,9 @@ class ChromecastStreamController:
             "alsa",
             "-thread_queue_size",
             "1024",
-            "-ac",
-            "2",
-            "-ar",
+            "-channels",
+            str(self.settings.channels),
+            "-sample_rate",
             str(self.settings.sample_rate),
             "-i",
             self.settings.usb_alsa_device,
@@ -140,9 +160,9 @@ class ChromecastStreamController:
             "-hls_time",
             str(self.settings.hls_segment_seconds),
             "-hls_list_size",
-            "6",
+            "10",
             "-hls_flags",
-            "delete_segments+append_list",
+            "append_list+omit_endlist",
             "-hls_allow_cache",
             "0",
             str(playlist_path),
@@ -193,18 +213,34 @@ class ChromecastStreamController:
 
             say("Starting audio stream…")
             cmd = self._build_ffmpeg_cmd(playlist)
-            self._ffmpeg_proc = subprocess.Popen(
-                cmd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE,
-                text=True,
-            )
-
-            if not _wait_for_hls(playlist):
-                if self._ffmpeg_proc.poll() is not None:
-                    self._set_status(False, target.name, _ffmpeg_error(self._ffmpeg_proc))
-                else:
-                    self._set_status(False, target.name, "ffmpeg did not produce HLS stream")
+            ffmpeg_err = ""
+            for attempt in range(4):
+                self._ffmpeg_proc = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                )
+                if _wait_for_hls(playlist):
+                    break
+                ffmpeg_err = _ffmpeg_error(self._ffmpeg_proc)
+                busy = "busy" in ffmpeg_err.lower() or "resource" in ffmpeg_err.lower()
+                if self._ffmpeg_proc.poll() is None:
+                    self._ffmpeg_proc.terminate()
+                    try:
+                        self._ffmpeg_proc.wait(timeout=2)
+                    except Exception:
+                        pass
+                self._ffmpeg_proc = None
+                if busy and attempt < 3:
+                    say("Mic busy — retrying…")
+                    time.sleep(0.5)
+                    continue
+                self._set_status(
+                    False,
+                    target.name,
+                    ffmpeg_err if ffmpeg_err else "ffmpeg did not produce HLS stream",
+                )
                 self.stop_stream()
                 return False
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 import tkinter as tk
 from typing import TYPE_CHECKING, Callable, Optional
 
@@ -73,6 +74,8 @@ class FullscreenApp:
         self._cast_busy = False
         self._scan_busy = False
         self._auto_cast_done = False
+        self._web_snapshot_lock = threading.Lock()
+        self._web_snapshot: dict = {}
 
         self._boot_debug = boot_debug
         self._network_poll_id: str | None = None
@@ -153,17 +156,10 @@ class FullscreenApp:
         if self.listener is not None:
             self.listener.stop()
             # PortAudio can hold /dev/snd briefly after close on Linux.
-            time.sleep(0.4)
+            time.sleep(0.6)
 
     def _resume_audio_monitor(self) -> None:
         """Restart level monitoring after cast stops."""
-        if (
-            self.settings.auto_cast_targets
-            and not self._auto_cast_done
-            and self._active_uuid is None
-        ):
-            # Auto-cast will retry — keep ALSA free for ffmpeg.
-            return
         if self.listener is None:
             return
         if self.listener.start():
@@ -457,7 +453,11 @@ class FullscreenApp:
             self._post_status("Still connecting…")
             return
 
+        self._focus_index = index
+        self._apply_target_styles()
+        self._scroll_focused_into_view()
         self._cast_busy = True
+        self._publish_web_snapshot()
         target = self.targets[index]
         self._post_status(f"Connecting to {target.name}…")
 
@@ -504,7 +504,9 @@ class FullscreenApp:
         if ok:
             self._active_uuid = target.uuid
             self._auto_cast_done = True
+            self._focus_index = index
             self._apply_target_styles()
+            self._scroll_focused_into_view()
             self._set_subtitle(f"Playing on {status.target_name}", SUCCESS_FG)
         else:
             self._active_uuid = None
@@ -513,6 +515,7 @@ class FullscreenApp:
             self._set_subtitle(msg, ERROR)
             log_milestone(f"cast connect failed: {msg}")
             self._resume_audio_monitor()
+        self._publish_web_snapshot()
 
     def _finish_cast_error(self, err: str) -> None:
         self._cast_busy = False
@@ -520,6 +523,7 @@ class FullscreenApp:
         self._apply_target_styles()
         self._set_subtitle(err, ERROR)
         self._resume_audio_monitor()
+        self._publish_web_snapshot()
 
     def _finish_stop_cast_ui(self) -> None:
         self._cast_busy = False
@@ -527,6 +531,7 @@ class FullscreenApp:
         self._apply_target_styles()
         self._set_subtitle(self._idle_subtitle if self.targets else "No speakers — tap ↻")
         self._resume_audio_monitor()
+        self._publish_web_snapshot()
 
     def _rebuild_target_buttons(self) -> None:
         for child in self.targets_frame.winfo_children():
@@ -571,6 +576,7 @@ class FullscreenApp:
         self.subtitle_label.configure(fg=color)
         self._status_text = text
         self._status_color = color
+        self._publish_web_snapshot()
 
     def _post_status(self, text: str, color: str = ON_SURFACE_VARIANT) -> None:
         """Thread-safe status line — schedules Tk update, never blocks mainloop."""
@@ -663,6 +669,7 @@ class FullscreenApp:
                 return
             self._post_status("Scanning…")
             self._scan_busy = True
+            self._publish_web_snapshot()
             import threading
 
             threading.Thread(
@@ -729,6 +736,7 @@ class FullscreenApp:
         self._apply_target_styles()
         self._maybe_auto_cast()
         self._update_status_text()
+        self._publish_web_snapshot()
 
     def _auto_refresh(self) -> None:
         if self.discovery is not None:
@@ -774,15 +782,8 @@ class FullscreenApp:
             return "success"
         return "info"
 
-    def get_web_snapshot(self) -> dict:
-        """Thread-safe view of the current UI state for the web interface."""
-        targets = self.targets
+    def _build_web_snapshot(self) -> dict:
         active = self._active_uuid
-        rms = peak = 0.0
-        if self.listener is not None:
-            snapshot = self.listener.get_latest_snapshot()
-            rms = snapshot.levels.rms_linear
-            peak = snapshot.levels.peak_linear
         return {
             "status": {"text": self._status_text, "kind": self._status_kind()},
             "active_uuid": active,
@@ -795,13 +796,41 @@ class FullscreenApp:
                     "is_group": target.is_group,
                     "active": target.uuid == active,
                 }
-                for target in targets
+                for target in self.targets
             ],
-            # Match AudioBarsWidget: rms_linear * 3, clamped to 0..1.
-            "level": max(0.0, min(1.0, rms * 3.0)),
-            "rms": rms,
-            "peak": peak,
+            "level": 0.0,
+            "rms": 0.0,
+            "peak": 0.0,
         }
+
+    def _publish_web_snapshot(self) -> None:
+        """Refresh the cached snapshot on the Tk thread for HTTP workers to read."""
+        snap = self._build_web_snapshot()
+        with self._web_snapshot_lock:
+            self._web_snapshot = snap
+
+    def get_web_snapshot(self) -> dict:
+        """Thread-safe view of the current UI state for the web interface."""
+        with self._web_snapshot_lock:
+            snap = {
+                **self._web_snapshot,
+                "status": dict(self._web_snapshot.get("status", {})),
+                "targets": [
+                    dict(target) for target in self._web_snapshot.get("targets", [])
+                ],
+            }
+        if not snap.get("targets") and not snap.get("status"):
+            snap = self._build_web_snapshot()
+        rms = peak = 0.0
+        if self.listener is not None:
+            snapshot = self.listener.get_latest_snapshot()
+            rms = snapshot.levels.rms_linear
+            peak = snapshot.levels.peak_linear
+        # Match AudioBarsWidget: rms_linear * 3, clamped to 0..1.
+        snap["level"] = max(0.0, min(1.0, rms * 3.0))
+        snap["rms"] = rms
+        snap["peak"] = peak
+        return snap
 
     def web_request_cast(self, uuid: str) -> bool:
         """Toggle casting for a target by uuid (same as tapping it on screen)."""
@@ -816,6 +845,10 @@ class FullscreenApp:
             None,
         )
         if index is not None:
+            self._focus_index = index
+            self._apply_target_styles()
+            self._scroll_focused_into_view()
+            self._publish_web_snapshot()
             self._on_target_tap(index)
 
     def web_request_refresh(self) -> None:
@@ -854,16 +887,6 @@ class FullscreenApp:
 
     def _load_audio_worker(self) -> None:
         import time
-
-        # When auto-cast is enabled, skip the level monitor at boot so ffmpeg can
-        # open hw:N,0 immediately (ALSA allows only one capture client).
-        if self.settings.auto_cast_targets:
-            self._ensure_audio()
-            self.root.after(
-                0,
-                lambda: self._audio_startup_done(True, None),
-            )
-            return
 
         input_ok = False
         error: str | None = None
