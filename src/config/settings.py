@@ -34,6 +34,10 @@ class AppSettings:
     cast_known_hosts: list[str] = field(default_factory=list)
     plate_buttons_side: str = "left"
 
+    web_ui_enabled: bool = True
+    web_host: str = "0.0.0.0"
+    web_port: int = 8080
+
     @classmethod
     def from_env(cls) -> "AppSettings":
         known_raw = os.getenv("CAST_KNOWN_HOSTS", "").strip()
@@ -59,4 +63,7 @@ class AppSettings:
             cast_refresh_interval=float(os.getenv("CAST_REFRESH_INTERVAL", "6")),
             cast_known_hosts=known_hosts,
             plate_buttons_side=plate_side,
+            web_ui_enabled=_env_bool("VINYL_WEB_UI", True),
+            web_host=os.getenv("VINYL_WEB_HOST", "0.0.0.0").strip(),
+            web_port=int(os.getenv("VINYL_WEB_PORT", "8080")),
         )

@@ -53,6 +53,11 @@ class FullscreenApp:
         self._refresh_ms = max(2000, int(settings.cast_refresh_interval * 1000))
 
         self.subtitle_var = tk.StringVar(value="Select source")
+        # Plain mirrors of the status line so the web server can read it off-thread
+        # (Tk variables are not safe to touch from the HTTP worker threads).
+        self._status_text = "Select source"
+        self._status_color = ON_SURFACE_VARIANT
+        self.web = None
         self._header_h = 34
         self._top_btn_slot = 58
         self._idle_subtitle = "Select source"
@@ -492,6 +497,8 @@ class FullscreenApp:
     def _set_subtitle(self, text: str, color: str = ON_SURFACE_VARIANT) -> None:
         self.subtitle_var.set(text)
         self.subtitle_label.configure(fg=color)
+        self._status_text = text
+        self._status_color = color
 
     def _post_status(self, text: str, color: str = ON_SURFACE_VARIANT) -> None:
         """Thread-safe status line — schedules Tk update, never blocks mainloop."""
@@ -618,11 +625,91 @@ class FullscreenApp:
         )
         self.root.after(80, self._update_audio_ui)
 
+    # ------------------------------------------------------------------
+    # Web interface bridge
+    #
+    # The web server runs in background HTTP threads. To keep the Tk app the
+    # single source of truth (so screen + web never disagree), web actions are
+    # scheduled onto the Tk main loop via ``after()`` and reuse the exact same
+    # handlers as a physical tap. Reads return a plain snapshot dict.
+    # ------------------------------------------------------------------
+    def _status_kind(self) -> str:
+        if self._status_color == ERROR:
+            return "error"
+        if self._status_color == SUCCESS_FG:
+            return "success"
+        return "info"
+
+    def get_web_snapshot(self) -> dict:
+        """Thread-safe view of the current UI state for the web interface."""
+        targets = self.targets
+        active = self._active_uuid
+        rms = peak = 0.0
+        if self.listener is not None:
+            snapshot = self.listener.get_latest_snapshot()
+            rms = snapshot.levels.rms_linear
+            peak = snapshot.levels.peak_linear
+        return {
+            "status": {"text": self._status_text, "kind": self._status_kind()},
+            "active_uuid": active,
+            "busy": self._cast_busy,
+            "scanning": self._scan_busy,
+            "targets": [
+                {
+                    "uuid": target.uuid,
+                    "name": target.name,
+                    "is_group": target.is_group,
+                    "active": target.uuid == active,
+                }
+                for target in targets
+            ],
+            # Match AudioBarsWidget: rms_linear * 3, clamped to 0..1.
+            "level": max(0.0, min(1.0, rms * 3.0)),
+            "rms": rms,
+            "peak": peak,
+        }
+
+    def web_request_cast(self, uuid: str) -> bool:
+        """Toggle casting for a target by uuid (same as tapping it on screen)."""
+        if not any(target.uuid == uuid for target in self.targets):
+            return False
+        self.root.after(0, lambda u=uuid: self._cast_by_uuid(u))
+        return True
+
+    def _cast_by_uuid(self, uuid: str) -> None:
+        index = next(
+            (i for i, target in enumerate(self.targets) if target.uuid == uuid),
+            None,
+        )
+        if index is not None:
+            self._on_target_tap(index)
+
+    def web_request_refresh(self) -> None:
+        self.root.after(0, self.refresh_targets)
+
+    def _start_web_ui(self) -> None:
+        if not self.settings.web_ui_enabled or self.web is not None:
+            return
+        try:
+            from src.web.server import WebInterface
+
+            self.web = WebInterface(
+                self,
+                host=self.settings.web_host,
+                port=self.settings.web_port,
+            )
+            self.web.start()
+            log_milestone(f"web ui on :{self.settings.web_port}")
+        except Exception as exc:  # never let the web UI break the screen
+            self.web = None
+            log_milestone(f"web ui failed: {exc}")
+
     def run(self) -> None:
         log_milestone("ui visible on tft")
         self._update_audio_ui()
         self.root.after(50, self._begin_background_startup)
         self.root.after(150, self._ensure_input_focus)
+        self.root.after(200, self._start_web_ui)
         self.root.mainloop()
 
     def _begin_background_startup(self) -> None:
@@ -773,6 +860,12 @@ class FullscreenApp:
             except Exception:
                 pass
             self._auto_after_id = None
+        if self.web is not None:
+            try:
+                self.web.stop()
+            except Exception:
+                pass
+            self.web = None
         if self.controller is not None:
             self.controller.stop_stream()
         if self.listener is not None:

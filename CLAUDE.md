@@ -149,6 +149,7 @@ cd /home/vinyl/Desktop/vinyl && git pull && bash scripts/recover.sh && sudo rebo
 - `src/display/bars_widget.py` — audio bars
 - `src/cast/group_discovery.py` — persistent `CastBrowser` + Zeroconf
 - `src/cast/stream_controller.py` — HLS ffmpeg + Chromecast
+- `src/web/server.py` — optional browser UI mirroring the TFT controls (stdlib http.server; Tk app stays source of truth via `after()`-scheduled actions)
 - `src/audio/` — sounddevice input + levels
 - `src/config/settings.py` — env-based settings (see `.env.example`)
 - `tests/` — unittest (`python -m unittest discover -s tests`)

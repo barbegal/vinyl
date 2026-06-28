@@ -209,6 +209,40 @@ Check status (rp connect / vnc section): `./scripts/diagnose_boot.sh`. Mirror lo
 
 **Paste diagnostics for help:** `bash scripts/diagnose_boot.sh --report` → `~/.vinyl-report.txt`
 
+## Web interface (browser controls)
+
+A lightweight browser UI mirrors the on-screen controls — the same speaker list,
+cast/stop, refresh, status line, and live audio bars. The physical TFT stays the
+single source of truth, so casting from the web reflects on the screen and vice
+versa. It runs automatically alongside the app (stdlib only, no extra deps).
+
+Open it from any device on the same LAN:
+
+```
+http://<pi-host>:8080/
+```
+
+It also works over the Raspberry Pi Connect tunnel (handy when you're remote).
+
+### Install it to your phone (PWA)
+
+The page is a Progressive Web App, so you can add it to your home screen and it
+opens fullscreen like a native remote (its own icon, no browser chrome):
+
+- **iPhone/iPad (Safari):** Share → *Add to Home Screen*
+- **Android (Chrome):** ⋮ menu → *Install app* / *Add to Home screen*
+
+A service worker caches the app shell so it launches instantly; speaker state and
+controls always hit the Pi live.
+
+Configure in `.env`:
+
+```bash
+VINYL_WEB_UI=1          # 0 to disable the web interface
+VINYL_WEB_HOST=0.0.0.0  # 127.0.0.1 = localhost only (tunnel via Connect/SSH)
+VINYL_WEB_PORT=8080
+```
+
 ## Generate UI screenshots
 
 ```bash
