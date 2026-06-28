@@ -148,11 +148,22 @@ class FullscreenApp:
 
     def _release_audio_for_stream(self) -> None:
         """Free the USB mic so ffmpeg can capture via ALSA (one client at a time)."""
+        import time
+
         if self.listener is not None:
             self.listener.stop()
+            # PortAudio can hold /dev/snd briefly after close on Linux.
+            time.sleep(0.4)
 
     def _resume_audio_monitor(self) -> None:
         """Restart level monitoring after cast stops."""
+        if (
+            self.settings.auto_cast_targets
+            and not self._auto_cast_done
+            and self._active_uuid is None
+        ):
+            # Auto-cast will retry — keep ALSA free for ffmpeg.
+            return
         if self.listener is None:
             return
         if self.listener.start():
@@ -843,6 +854,16 @@ class FullscreenApp:
 
     def _load_audio_worker(self) -> None:
         import time
+
+        # When auto-cast is enabled, skip the level monitor at boot so ffmpeg can
+        # open hw:N,0 immediately (ALSA allows only one capture client).
+        if self.settings.auto_cast_targets:
+            self._ensure_audio()
+            self.root.after(
+                0,
+                lambda: self._audio_startup_done(True, None),
+            )
+            return
 
         input_ok = False
         error: str | None = None

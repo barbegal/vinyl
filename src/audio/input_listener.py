@@ -139,6 +139,10 @@ class AudioInputListener:
         if self._stream is not None:
             try:
                 self._stream.stop()
+                try:
+                    self._stream.abort()
+                except Exception:
+                    pass
                 self._stream.close()
             except Exception:
                 pass
