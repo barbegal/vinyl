@@ -196,7 +196,7 @@ def run_calibration(
         best_peak = peak
         best_rms_db = rms_db
         best_value = value
-        if 3000 < peak < 32760:
+        if 3000 < peak < 18000:
             break
         if 0 < peak < 3000:
             break
@@ -266,7 +266,7 @@ def auto_calibrate_enabled() -> bool:
 def needs_recalibration(cal: AudioCalibration | None) -> bool:
     if cal is None:
         return True
-    return cal.measured_peak >= 32760
+    return cal.measured_peak >= 18000
 
 
 def ensure_calibration(
