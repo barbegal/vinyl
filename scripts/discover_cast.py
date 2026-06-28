@@ -17,7 +17,6 @@ from src.cast.group_discovery import CastGroupDiscovery
 def main() -> None:
     settings = AppSettings.from_env()
     discovery = CastGroupDiscovery(
-        groups_only=settings.groups_only,
         discovery_timeout=settings.cast_discovery_timeout,
         known_hosts=settings.cast_known_hosts,
     )

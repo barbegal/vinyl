@@ -10,7 +10,7 @@ LOG="${HOME}/.vinyl-xsession.log"
 if [ -f "$APP_DIR/.env" ]; then
   set -a
   # shellcheck source=load_env.sh
-  . "$APP_DIR/scripts/load_env.sh"
+  VINYL_ENV_FILE="$APP_DIR/.env" . "$APP_DIR/scripts/load_env.sh"
   set +a
 fi
 

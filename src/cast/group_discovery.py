@@ -54,11 +54,9 @@ class CastTarget:
 class CastGroupDiscovery:
     def __init__(
         self,
-        groups_only: bool = False,
         discovery_timeout: float = 12.0,
         known_hosts: list[str] | None = None,
     ) -> None:
-        self.groups_only = groups_only
         self.discovery_timeout = discovery_timeout
         self.known_hosts = known_hosts or []
         self.last_error: Optional[str] = None
@@ -99,13 +97,7 @@ class CastGroupDiscovery:
         return CastTarget(cast_info=cast_info)
 
     @staticmethod
-    def _filter_targets(targets: list[CastTarget], groups_only: bool) -> list[CastTarget]:
-        if not groups_only:
-            return sorted(targets, key=lambda t: (not t.is_group, t.name.lower()))
-
-        only_groups = [target for target in targets if target.is_group]
-        if only_groups:
-            return sorted(only_groups, key=lambda t: t.name.lower())
+    def _sort_targets(targets: list[CastTarget]) -> list[CastTarget]:
         return sorted(targets, key=lambda t: (not t.is_group, t.name.lower()))
 
     def _stop_browser(self) -> None:
@@ -133,15 +125,7 @@ class CastGroupDiscovery:
         for device in devices:
             target = self._from_cast_info(device)
             deduped[target.uuid] = target
-        filtered = self._filter_targets(list(deduped.values()), self.groups_only)
-
-        if devices and not filtered:
-            self.last_error = (
-                f"Found {len(devices)} on LAN but filter hid them "
-                "(set GOOGLE_GROUPS_ONLY=false in .env)"
-            )
-
-        return filtered
+        return self._sort_targets(list(deduped.values()))
 
     def discover(self, wait_seconds: float | None = None) -> list[CastTarget]:
         """Read Cast devices from the persistent browser (optionally wait for mDNS)."""

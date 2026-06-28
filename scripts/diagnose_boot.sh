@@ -59,7 +59,7 @@ run_diagnosis() {
   echo ""
   echo "=== audio / cast ==="
   if [[ -f "$APP_DIR/.env" ]]; then
-    grep -E '^USB_ALSA_DEVICE=|^GOOGLE_GROUPS_ONLY=|^CAST_DISCOVERY' "$APP_DIR/.env" 2>/dev/null | sed 's/^/  /' || true
+    grep -E '^USB_ALSA_DEVICE=|^CAST_DISCOVERY' "$APP_DIR/.env" 2>/dev/null | sed 's/^/  /' || true
   fi
   if command -v arecord >/dev/null; then
     arecord -l 2>/dev/null | grep -E '^card |USB' | sed 's/^/  /' || echo "  (no arecord devices)"

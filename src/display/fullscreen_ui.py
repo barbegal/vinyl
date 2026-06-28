@@ -139,7 +139,6 @@ class FullscreenApp:
 
         if self.discovery is None:
             self.discovery = CastGroupDiscovery(
-                groups_only=self.settings.groups_only,
                 discovery_timeout=self.settings.cast_discovery_timeout,
                 known_hosts=self.settings.cast_known_hosts,
             )

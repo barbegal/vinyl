@@ -151,11 +151,6 @@ if [[ "$INSTALL_BUTTONS" -eq 1 ]]; then
   sudo bash "$APP_DIR/scripts/setup_pitft_buttons.sh"
 fi
 
-if [[ -f "$APP_DIR/.env" ]] && grep -qE '^GOOGLE_GROUPS_ONLY=true' "$APP_DIR/.env"; then
-  sed -i 's/^GOOGLE_GROUPS_ONLY=.*/GOOGLE_GROUPS_ONLY=false/' "$APP_DIR/.env"
-  echo "  set GOOGLE_GROUPS_ONLY=false in .env (show all Cast devices)"
-fi
-
 echo ""
 if [[ -x "$APP_DIR/.venv/bin/python" ]]; then
   echo "  venv: ok"

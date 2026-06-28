@@ -255,7 +255,7 @@ Configure the priority list in `.env` (first match wins):
 
 ```bash
 # Comma-separated names, highest priority first. Empty = disabled (manual only).
-VINYL_AUTO_CAST=Upper,Living Room Speaker
+VINYL_AUTO_CAST="Upper,Living Room Speaker"
 ```
 
 Names match case-insensitively (exact match preferred, then substring). Auto-connect
@@ -285,6 +285,5 @@ If speakers show in Google Home but not in this app:
 3. Increase scan time in `.env`: `CAST_DISCOVERY_TIMEOUT=20`
 4. If mDNS is blocked on your router, set speaker IPs in `.env`:
    `CAST_KNOWN_HOSTS=192.168.1.50,192.168.1.51`
-5. To hide individual speakers and show only groups: `GOOGLE_GROUPS_ONLY=true`
 
 Cast connection requires the full device record from mDNS (including dynamic ports for speaker groups). Older code that connected by IP alone could not reach groups like those on your network.

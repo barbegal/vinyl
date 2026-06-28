@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 import traceback
 from pathlib import Path
 
@@ -10,10 +11,36 @@ def _boot_debug_enabled() -> bool:
     return raw not in {"0", "false", "no", "off"}
 
 
+def _x11_display_ready() -> bool:
+    """True when DISPLAY points at a running local X server (e.g. :0 from startx)."""
+    display = os.environ.get("DISPLAY", "").strip()
+    if not display.startswith(":"):
+        return False
+    try:
+        num = display[1:].split(".", 1)[0]
+        return os.path.exists(f"/tmp/.X11-unix/X{num}")
+    except (ValueError, IndexError):
+        return False
+
+
+def _print_no_display_help() -> None:
+    print(
+        "\nNo X server on DISPLAY — Tk cannot open the PiTFT.\n"
+        "  Do not run: python -m src.main   (from SSH alone)\n"
+        "  Instead:    sudo pkill -x Xorg   (autologin restarts startx)\n"
+        "  Or check:   pgrep -a Xorg\n",
+        file=sys.stderr,
+    )
+
+
 def main() -> None:
     use_debug = _boot_debug_enabled()
     root = None
     debug = None
+
+    if not _x11_display_ready():
+        _print_no_display_help()
+        return
 
     try:
         import tkinter as tk
@@ -49,6 +76,9 @@ def main() -> None:
     except Exception:
         traceback.print_exc()
         message = traceback.format_exc()
+        if "couldn't connect to display" in message.lower():
+            _print_no_display_help()
+            return
         if debug is not None:
             debug.show_fatal(message)
         else:
@@ -57,6 +87,11 @@ def main() -> None:
 
 
 def _show_fatal_error(message: str) -> None:
+    if not _x11_display_ready():
+        print(message, file=sys.stderr)
+        _print_no_display_help()
+        return
+
     from src.boot_debug_ui import show_error_screen
 
     show_error_screen(
