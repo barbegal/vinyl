@@ -163,6 +163,7 @@ else
     echo "  set VINYL_AUTO_CAST=\"Living Room pair\" (primary speaker)"
     _env_changed=1
   fi
+  if grep -qE '^CAST_INPUT_GAIN_DB=-(9|15)(\.0)?$' "$APP_DIR/.env" 2>/dev/null; then
     sed -i 's/^CAST_INPUT_GAIN_DB=.*/CAST_INPUT_GAIN_DB=-21/' "$APP_DIR/.env"
     echo "  set CAST_INPUT_GAIN_DB=-21 (hot USB line-in — lower cast level)"
     _env_changed=1
