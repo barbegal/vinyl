@@ -117,6 +117,11 @@ else
     echo "  quoted VINYL_AUTO_CAST in .env (unquoted spaces break boot)"
     _env_changed=1
   fi
+  if grep -qE '^AUDIO_CHANNELS=1' "$APP_DIR/.env" 2>/dev/null; then
+    sed -i 's/^AUDIO_CHANNELS=1/AUDIO_CHANNELS=2/' "$APP_DIR/.env"
+    echo "  set AUDIO_CHANNELS=2 (USB mic is stereo-only)"
+    _env_changed=1
+  fi
   if [[ "$_env_changed" -eq 1 ]]; then
     echo "  .env sanitized — if boot still fails, compare with .env.example"
   fi
