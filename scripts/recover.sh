@@ -122,10 +122,30 @@ else
     echo "  set AUDIO_CHANNELS=2 (USB line-in is usually stereo)"
     _env_changed=1
   fi
+  if grep -qE '^AUDIO_LEVEL_GAIN=4(\.0)?$' "$APP_DIR/.env" 2>/dev/null; then
+    sed -i 's/^AUDIO_LEVEL_GAIN=.*/AUDIO_LEVEL_GAIN=1.0/' "$APP_DIR/.env"
+    echo "  set AUDIO_LEVEL_GAIN=1.0 (old ×4 gain pegged bars — use AUDIO_LEVEL_FLOOR_DB/CEIL_DB)"
+    _env_changed=1
+  fi
+  if ! grep -qE '^AUDIO_LEVEL_FLOOR_DB=' "$APP_DIR/.env" 2>/dev/null; then
+    printf 'AUDIO_LEVEL_FLOOR_DB=-50\nAUDIO_LEVEL_CEIL_DB=0\n' >>"$APP_DIR/.env"
+    echo "  added AUDIO_LEVEL_FLOOR_DB / AUDIO_LEVEL_CEIL_DB for bar meter scaling"
+    _env_changed=1
+  fi
+  if grep -qE '^CAST_INPUT_GAIN_DB=-(9|15)(\.0)?$' "$APP_DIR/.env" 2>/dev/null; then
+    sed -i 's/^CAST_INPUT_GAIN_DB=.*/CAST_INPUT_GAIN_DB=-21/' "$APP_DIR/.env"
+    echo "  set CAST_INPUT_GAIN_DB=-21 (hot USB line-in — lower cast level)"
+    _env_changed=1
+  fi
+  if grep -qE '^CAST_OUTPUT_VOLUME=0\.(28|30|35)$' "$APP_DIR/.env" 2>/dev/null; then
+    sed -i 's/^CAST_OUTPUT_VOLUME=.*/CAST_OUTPUT_VOLUME=0.22/' "$APP_DIR/.env"
+    echo "  set CAST_OUTPUT_VOLUME=0.22 (lower Chromecast playback level)"
+    _env_changed=1
+  fi
   if grep -qE '^CAST_KNOWN_HOSTS=CAST_' "$APP_DIR/.env" 2>/dev/null; then
     _gain="$(sed -n 's/^CAST_KNOWN_HOSTS=CAST_INPUT_GAIN_DB=//p' "$APP_DIR/.env" | head -1)"
     sed -i '/^CAST_KNOWN_HOSTS=CAST_/d' "$APP_DIR/.env"
-    printf 'CAST_KNOWN_HOSTS=\nCAST_INPUT_GAIN_DB=%s\n' "${_gain:--9}" >>"$APP_DIR/.env"
+    printf 'CAST_KNOWN_HOSTS=\nCAST_INPUT_GAIN_DB=%s\n' "${_gain:--21}" >>"$APP_DIR/.env"
     echo "  fixed merged CAST_KNOWN_HOSTS / CAST_INPUT_GAIN_DB line in .env"
     _env_changed=1
   fi

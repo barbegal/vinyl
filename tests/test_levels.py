@@ -1,8 +1,16 @@
+"""Tests for audio level calculations and display mapping."""
+
+from __future__ import annotations
+
 import unittest
 
 import numpy as np
 
-from src.audio.levels import calculate_audio_levels
+from src.audio.levels import (
+    calculate_audio_levels,
+    combine_levels_for_display,
+    map_linear_to_display,
+)
 
 
 class TestAudioLevels(unittest.TestCase):
@@ -18,6 +26,17 @@ class TestAudioLevels(unittest.TestCase):
         levels = calculate_audio_levels(samples)
         self.assertGreater(levels.rms_linear, 0.0)
         self.assertGreater(levels.peak_linear, 0.0)
+
+    def test_display_mapping_hot_line_in_not_always_max(self):
+        # ~-12 dB RMS — should sit around mid/high bars, not pegged at 1.0
+        rms = 10 ** (-12 / 20)
+        peak = 10 ** (-6 / 20)
+        value = combine_levels_for_display(rms, peak, floor_db=-50, ceil_db=0, gain=1.0)
+        self.assertGreater(value, 0.4)
+        self.assertLess(value, 0.95)
+
+    def test_display_mapping_silence_is_zero(self):
+        self.assertEqual(map_linear_to_display(0.0), 0.0)
 
 
 if __name__ == "__main__":

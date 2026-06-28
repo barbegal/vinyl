@@ -5,6 +5,7 @@ import tkinter as tk
 from typing import TYPE_CHECKING, Callable, Optional
 
 from src.audio.alsa_device import capture_is_shared, resolve_capture_device
+from src.audio.levels import combine_levels_for_display
 from src.boot_timing import log_milestone
 from src.config.settings import AppSettings
 from src.display.bars_widget import AudioBarsWidget
@@ -289,6 +290,8 @@ class FullscreenApp:
             width=layout["bars_w"],
             height=content_h,
             level_gain=self.settings.level_display_gain,
+            level_floor_db=self.settings.level_floor_db,
+            level_ceil_db=self.settings.level_ceil_db,
         )
         self.bars.place(
             x=layout["bars_x"],
@@ -834,7 +837,13 @@ class FullscreenApp:
             rms = snapshot.levels.rms_linear
             peak = snapshot.levels.peak_linear
         gain = self.settings.level_display_gain
-        snap["level"] = max(0.0, min(1.0, rms * gain))
+        snap["level"] = combine_levels_for_display(
+            rms,
+            peak,
+            floor_db=self.settings.level_floor_db,
+            ceil_db=self.settings.level_ceil_db,
+            gain=gain,
+        )
         snap["rms"] = rms
         snap["peak"] = peak
         return snap

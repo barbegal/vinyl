@@ -14,6 +14,8 @@ if [[ -f "$ENV_FILE" ]]; then
 fi
 
 HW="${USB_ALSA_DEVICE:-hw:2,0}"
+PERIOD="${VINYL_ALSA_PERIOD_SIZE:-128}"
+BUFFER="${VINYL_ALSA_BUFFER_SIZE:-512}"
 if [[ "$HW" == "vinyl_in" ]]; then
   echo "  USB capture: already using vinyl_in"
   exit 0
@@ -44,10 +46,11 @@ if [[ -f "$ASOUNDRC" ]] && ! grep -q "pcm.vinyl_in" "$ASOUNDRC" 2>/dev/null; the
 fi
 
 if [[ -f "$ASOUNDRC" ]] && grep -q "pcm.vinyl_in" "$ASOUNDRC" 2>/dev/null; then
-  # Refresh the hw: slave line if the card number changed.
-  sed -i "/pcm.vinyl_dsnoop/,/^}/ s|pcm \".*\"|pcm \"$HW\"|" "$ASOUNDRC" 2>/dev/null || true
-else
-  cat >>"$ASOUNDRC" <<EOF
+  sed -i '/# vinyl — shared USB capture/,/^}/d' "$ASOUNDRC" 2>/dev/null || true
+  sed -i '/^pcm\.vinyl_in {/,/^}/d' "$ASOUNDRC" 2>/dev/null || true
+fi
+
+cat >>"$ASOUNDRC" <<EOF
 
 # vinyl — shared USB capture (level bars + ffmpeg cast stream)
 pcm.vinyl_dsnoop {
@@ -56,6 +59,8 @@ pcm.vinyl_dsnoop {
   slave {
     pcm "$HW"
     channels 2
+    period_size $PERIOD
+    buffer_size $BUFFER
   }
 }
 pcm.vinyl_in {
@@ -63,7 +68,6 @@ pcm.vinyl_in {
   slave.pcm "vinyl_dsnoop"
 }
 EOF
-fi
 
 if [[ -f "$ENV_FILE" ]] && grep -q "^USB_ALSA_DEVICE=" "$ENV_FILE"; then
   sed -i "s|^USB_ALSA_DEVICE=.*|USB_ALSA_DEVICE=vinyl_in|" "$ENV_FILE"

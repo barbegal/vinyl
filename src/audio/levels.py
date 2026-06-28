@@ -18,6 +18,36 @@ def _linear_to_db(value: float) -> float:
     return 20.0 * float(np.log10(safe))
 
 
+def map_linear_to_display(
+    linear: float,
+    floor_db: float = -50.0,
+    ceil_db: float = 0.0,
+    gain: float = 1.0,
+) -> float:
+    """Map linear amplitude (~0–1) to a 0–1 bar height using a dB window."""
+    if linear <= 1e-8:
+        return 0.0
+    db = _linear_to_db(linear)
+    span = ceil_db - floor_db
+    if span <= 1e-6:
+        return 0.0
+    normalized = (db - floor_db) / span
+    return max(0.0, min(1.0, normalized * gain))
+
+
+def combine_levels_for_display(
+    rms_linear: float,
+    peak_linear: float,
+    floor_db: float = -50.0,
+    ceil_db: float = 0.0,
+    gain: float = 1.0,
+) -> float:
+    """Blend RMS (body) and peak (transients) for a responsive meter."""
+    rms_v = map_linear_to_display(rms_linear, floor_db, ceil_db, gain)
+    peak_v = map_linear_to_display(peak_linear, floor_db, ceil_db, gain)
+    return max(0.0, min(1.0, rms_v * 0.55 + peak_v * 0.45))
+
+
 def calculate_audio_levels(samples: np.ndarray) -> AudioLevels:
     if samples.size == 0:
         return AudioLevels(0.0, 0.0, -120.0, -120.0)

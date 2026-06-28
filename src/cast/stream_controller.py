@@ -28,6 +28,12 @@ class StreamStatus:
     stream_url: str
 
 
+@dataclass(frozen=True)
+class StreamFormat:
+    path: str
+    mime: str
+
+
 def _local_ip_for_lan() -> str:
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
@@ -80,15 +86,146 @@ def _ensure_cast_volume(chromecast, level: float) -> None:
         pass
 
 
-def _stream_audio_filter(settings: AppSettings) -> str:
+def build_stream_audio_filter(settings: AppSettings) -> str:
     parts: list[str] = []
     gain = settings.stream_input_gain_db
     if gain != 0.0:
         parts.append(f"volume={gain:.1f}dB")
-    parts.append("highpass=f=40")
-    if settings.stream_high_cut_hz > 0:
-        parts.append(f"lowpass=f={settings.stream_high_cut_hz}")
+    mode = settings.cast_stereo_mode
+    if mode == "duplicate":
+        parts.append("pan=stereo|c0=c0|c1=c0")
+    elif mode == "sum":
+        parts.append("pan=stereo|c0=0.5*c0+0.5*c1|c1=0.5*c0+0.5*c1")
+    if settings.cast_stream_eq:
+        parts.append("highpass=f=40")
+        if settings.stream_high_cut_hz > 0:
+            parts.append(f"lowpass=f={settings.stream_high_cut_hz}")
     return ",".join(parts)
+
+
+def stream_format_for_codec(codec: str) -> StreamFormat:
+    if codec in ("wav", "pcm"):
+        return StreamFormat("stream.wav", "audio/wav")
+    if codec == "aac":
+        return StreamFormat("stream.aac", "audio/aac")
+    if codec == "flac":
+        return StreamFormat("stream.flac", "audio/flac")
+    return StreamFormat("stream.mp3", "audio/mpeg")
+
+
+def cast_codec_fallback_chain(primary: str) -> list[str]:
+    """Try lossless first, then step down if the speaker rejects the MIME type."""
+    chain = [primary.strip().lower()]
+    for codec in ("wav", "flac", "aac", "mp3"):
+        if codec not in chain:
+            chain.append(codec)
+    return chain
+
+
+def build_ffmpeg_stream_cmd(settings: AppSettings, port: int) -> list[str]:
+    capture = resolve_capture_device(settings.usb_alsa_device)
+    fmt = stream_format_for_codec(settings.cast_stream_codec)
+    cmd: list[str] = [
+        settings.ffmpeg_bin,
+        "-hide_banner",
+        "-loglevel",
+        "error",
+    ]
+    if settings.cast_low_latency:
+        cmd.extend(
+            [
+                "-fflags",
+                "nobuffer",
+                "-flags",
+                "low_delay",
+                "-probesize",
+                "32",
+                "-analyzeduration",
+                "0",
+            ]
+        )
+    cmd.extend(
+        [
+            "-f",
+            "alsa",
+            "-thread_queue_size",
+            str(settings.cast_ffmpeg_queue_size),
+        ]
+    )
+    if settings.cast_low_latency and settings.cast_rtbufsize:
+        cmd.extend(["-rtbufsize", settings.cast_rtbufsize])
+    cmd.extend(
+        [
+            "-channels",
+            str(settings.channels),
+            "-sample_rate",
+            str(settings.sample_rate),
+            "-i",
+            capture,
+        ]
+    )
+    audio_filter = build_stream_audio_filter(settings)
+    if audio_filter:
+        cmd.extend(["-af", audio_filter])
+    cmd.extend(["-ac", "2"])
+    codec = settings.cast_stream_codec
+    if codec in ("wav", "pcm"):
+        cmd.extend(["-c:a", "pcm_s16le", "-f", "wav"])
+    elif codec == "aac":
+        cmd.extend(
+            [
+                "-c:a",
+                "aac",
+                "-aac_coder",
+                "fast",
+                "-b:a",
+                settings.hls_bitrate,
+                "-f",
+                "adts",
+            ]
+        )
+    elif codec == "flac":
+        cmd.extend(
+            ["-c:a", "flac", "-compression_level", "0", "-sample_fmt", "s16", "-f", "flac"]
+        )
+    else:
+        cmd.extend(
+            [
+                "-c:a",
+                "libmp3lame",
+                "-b:a",
+                settings.hls_bitrate,
+                "-compression_level",
+                "0",
+                "-reservoir",
+                "0",
+                "-f",
+                "mp3",
+            ]
+        )
+    if settings.cast_low_latency:
+        cmd.extend(
+            [
+                "-flush_packets",
+                "1",
+                "-avioflags",
+                "direct",
+                "-muxdelay",
+                "0",
+                "-muxpreload",
+                "0",
+            ]
+        )
+    cmd.extend(
+        [
+            "-content_type",
+            fmt.mime,
+            "-listen",
+            "1",
+            f"http://0.0.0.0:{port}/{fmt.path}",
+        ]
+    )
+    return cmd
 
 
 class ChromecastStreamController:
@@ -106,40 +243,33 @@ class ChromecastStreamController:
         self._status = StreamStatus(active, target, message, url)
 
     def _build_ffmpeg_cmd(self, port: int) -> list[str]:
-        capture = resolve_capture_device(self.settings.usb_alsa_device)
-        return [
-            self.settings.ffmpeg_bin,
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-f",
-            "alsa",
-            "-thread_queue_size",
-            "1024",
-            "-channels",
-            str(self.settings.channels),
-            "-sample_rate",
-            str(self.settings.sample_rate),
-            "-i",
-            capture,
-            "-af",
-            _stream_audio_filter(self.settings),
-            "-ac",
-            "2",
-            "-c:a",
-            "libmp3lame",
-            "-b:a",
-            self.settings.hls_bitrate,
-            "-compression_level",
-            "0",
-            "-f",
-            "mp3",
-            "-content_type",
-            "audio/mpeg",
-            "-listen",
-            "1",
-            f"http://0.0.0.0:{port}/stream.mp3",
-        ]
+        return build_ffmpeg_stream_cmd(self.settings, port)
+
+    def _start_ffmpeg_listen(self, port: int, codec: str) -> tuple[bool, str]:
+        settings = AppSettings(
+            **{
+                **self.settings.__dict__,
+                "cast_stream_codec": codec,
+            }
+        )
+        cmd = build_ffmpeg_stream_cmd(settings, port)
+        self._ffmpeg_proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        if _wait_for_ffmpeg_listen(self._ffmpeg_proc):
+            return True, ""
+        err = _ffmpeg_error(self._ffmpeg_proc)
+        if self._ffmpeg_proc.poll() is None:
+            self._ffmpeg_proc.terminate()
+            try:
+                self._ffmpeg_proc.wait(timeout=2)
+            except Exception:
+                pass
+        self._ffmpeg_proc = None
+        return False, err
 
     def start_stream(
         self,
@@ -170,7 +300,6 @@ class ChromecastStreamController:
             return False
 
         port = self.settings.hls_http_port
-        stream_url = f"http://{host_ip}:{port}/stream.mp3"
 
         try:
             say(f"Connecting to {target.name}…")
@@ -184,56 +313,63 @@ class ChromecastStreamController:
             say("Waiting for speaker…")
             self._chromecast.wait(timeout=12.0)
 
-            say("Starting audio stream…")
-            cmd = self._build_ffmpeg_cmd(port)
-            ffmpeg_err = ""
-            for attempt in range(4):
-                self._ffmpeg_proc = subprocess.Popen(
-                    cmd,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                )
-                if _wait_for_ffmpeg_listen(self._ffmpeg_proc):
+            codecs = cast_codec_fallback_chain(self.settings.cast_stream_codec)
+            last_err = ""
+            for codec in codecs:
+                stream_fmt = stream_format_for_codec(codec)
+                stream_url = f"http://{host_ip}:{port}/{stream_fmt.path}"
+                if codec != self.settings.cast_stream_codec:
+                    say(f"Retrying with {codec}…")
+
+                ffmpeg_err = ""
+                started = False
+                for attempt in range(4):
+                    say("Starting audio stream…")
+                    ok, ffmpeg_err = self._start_ffmpeg_listen(port, codec)
+                    if ok:
+                        started = True
+                        break
+                    busy = "busy" in ffmpeg_err.lower() or "resource" in ffmpeg_err.lower()
+                    if busy and attempt < 3:
+                        say("Audio in use — retrying…")
+                        time.sleep(1.0)
+                        continue
                     break
-                ffmpeg_err = _ffmpeg_error(self._ffmpeg_proc)
-                busy = "busy" in ffmpeg_err.lower() or "resource" in ffmpeg_err.lower()
-                if self._ffmpeg_proc.poll() is None:
-                    self._ffmpeg_proc.terminate()
-                    try:
-                        self._ffmpeg_proc.wait(timeout=2)
-                    except Exception:
-                        pass
-                self._ffmpeg_proc = None
-                if busy and attempt < 3:
-                    say("Audio in use — retrying…")
-                    time.sleep(1.0)
+
+                if not started:
+                    last_err = ffmpeg_err or "ffmpeg did not start stream"
                     continue
-                self._set_status(
-                    False,
-                    target.name,
-                    ffmpeg_err if ffmpeg_err else "ffmpeg did not start stream",
-                )
-                self.stop_stream()
-                return False
 
-            say("Sending to speaker…")
-            media_controller = self._chromecast.media_controller
-            media_controller.play_media(stream_url, "audio/mp3", stream_type="LIVE")
-            media_controller.block_until_active(timeout=20)
-            state = media_controller.status.player_state
-            if state and state != "PLAYING":
-                media_controller.play()
-                time.sleep(0.5)
-            _ensure_cast_volume(self._chromecast, self.settings.cast_output_volume)
+                say("Sending to speaker…")
+                media_controller = self._chromecast.media_controller
+                try:
+                    media_controller.play_media(stream_url, stream_fmt.mime, stream_type="LIVE")
+                    media_controller.block_until_active(timeout=15)
+                except Exception as exc:
+                    last_err = str(exc)
+                    self.stop_stream()
+                    continue
 
-            if self._ffmpeg_proc is not None and self._ffmpeg_proc.poll() is not None:
-                self._set_status(False, target.name, _ffmpeg_error(self._ffmpeg_proc))
-                self.stop_stream()
-                return False
+                state = media_controller.status.player_state
+                if state and state != "PLAYING":
+                    media_controller.play()
+                _ensure_cast_volume(self._chromecast, self.settings.cast_output_volume)
 
-            self._set_status(True, target.name, "Streaming", stream_url)
-            return True
+                if self._ffmpeg_proc is not None and self._ffmpeg_proc.poll() is not None:
+                    last_err = _ffmpeg_error(self._ffmpeg_proc)
+                    self.stop_stream()
+                    continue
+
+                self._set_status(True, target.name, "Streaming", stream_url)
+                return True
+
+            self._set_status(
+                False,
+                target.name,
+                last_err if last_err else "Could not start cast stream",
+            )
+            self.stop_stream()
+            return False
         except Exception as exc:
             self._set_status(False, target.name, friendly_cast_error(exc))
             self.stop_stream()
