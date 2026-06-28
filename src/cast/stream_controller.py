@@ -92,8 +92,12 @@ def build_stream_audio_filter(settings: AppSettings) -> str:
     if gain != 0.0:
         parts.append(f"volume={gain:.1f}dB")
     mode = settings.cast_stereo_mode
-    if mode == "duplicate":
+    if mode in ("duplicate", "duplicate_l"):
         parts.append("pan=stereo|c0=c0|c1=c0")
+    elif mode in ("duplicate_r", "right"):
+        parts.append("pan=stereo|c0=c1|c1=c1")
+    elif mode == "swap":
+        parts.append("pan=stereo|c0=c1|c1=c0")
     elif mode == "sum":
         parts.append("pan=stereo|c0=0.5*c0+0.5*c1|c1=0.5*c0+0.5*c1")
     if settings.cast_stream_eq:

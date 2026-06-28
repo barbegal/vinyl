@@ -16,8 +16,14 @@ fi
 HW="${USB_ALSA_DEVICE:-hw:2,0}"
 PERIOD="${VINYL_ALSA_PERIOD_SIZE:-128}"
 BUFFER="${VINYL_ALSA_BUFFER_SIZE:-512}"
+if [[ "$HW" == "vinyl_in" ]] && [[ -f "${HOME}/.asoundrc" ]]; then
+  _hw_line="$(grep -oE 'pcm "hw:[0-9]+,[0-9]+"' "${HOME}/.asoundrc" | head -1 | tr -d 'pcm "' || true)"
+  if [[ -n "$_hw_line" ]]; then
+    HW="$_hw_line"
+  fi
+fi
 if [[ "$HW" == "vinyl_in" ]]; then
-  echo "  USB capture: already using vinyl_in"
+  echo "  USB capture: skip — set USB_ALSA_DEVICE=hw:N,0 to rebuild ~/.asoundrc"
   exit 0
 fi
 

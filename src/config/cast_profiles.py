@@ -8,11 +8,11 @@ CAST_STREAM_PROFILES: dict[str, dict[str, Any]] = {
     # Uncompressed PCM over HTTP — lowest Pi-side delay, highest quality on LAN.
     "live": {
         "cast_stream_codec": "wav",
-        "cast_stream_eq": False,
+        "cast_stream_eq": True,
         "cast_ffmpeg_queue_size": 64,
         "cast_rtbufsize": "16k",
         "cast_low_latency": True,
-        "stream_high_cut_hz": 0,
+        "stream_high_cut_hz": 12000,
         "vinyl_alsa_period_size": 128,
         "vinyl_alsa_buffer_size": 512,
     },

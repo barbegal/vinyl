@@ -38,12 +38,14 @@ class AppSettings:
     cast_stream_codec: str = "wav"
     cast_stream_eq: bool = False
     cast_stream_profile: str = "live"
-    cast_stereo_mode: str = "stereo"
+    cast_stereo_mode: str = "duplicate_r"
     vinyl_alsa_period_size: int = 128
     vinyl_alsa_buffer_size: int = 512
     level_display_gain: float = 1.0
-    level_floor_db: float = -50.0
-    level_ceil_db: float = 0.0
+    level_floor_db: float = -58.0
+    level_ceil_db: float = 6.0
+    level_auto_range: bool = True
+    level_auto_decay: float = 0.993
 
     cast_discovery_timeout: float = 12.0
     cast_refresh_interval: float = 6.0
@@ -120,7 +122,7 @@ class AppSettings:
             if os.getenv("CAST_STREAM_EQ") is None
             else _env_bool("CAST_STREAM_EQ", False),
             cast_stream_profile=profile,
-            cast_stereo_mode=os.getenv("CAST_STEREO_MODE", "stereo").strip().lower(),
+            cast_stereo_mode=os.getenv("CAST_STEREO_MODE", "duplicate_r").strip().lower(),
             vinyl_alsa_period_size=int(
                 env_or_profile(
                     "VINYL_ALSA_PERIOD_SIZE", profile, "vinyl_alsa_period_size", 128, int
@@ -132,8 +134,10 @@ class AppSettings:
                 )
             ),
             level_display_gain=float(os.getenv("AUDIO_LEVEL_GAIN", "1.0")),
-            level_floor_db=float(os.getenv("AUDIO_LEVEL_FLOOR_DB", "-50")),
-            level_ceil_db=float(os.getenv("AUDIO_LEVEL_CEIL_DB", "0")),
+            level_floor_db=float(os.getenv("AUDIO_LEVEL_FLOOR_DB", "-58")),
+            level_ceil_db=float(os.getenv("AUDIO_LEVEL_CEIL_DB", "6")),
+            level_auto_range=_env_bool("AUDIO_LEVEL_AUTO_RANGE", True),
+            level_auto_decay=float(os.getenv("AUDIO_LEVEL_AUTO_DECAY", "0.993")),
             cast_discovery_timeout=float(os.getenv("CAST_DISCOVERY_TIMEOUT", "12")),
             cast_refresh_interval=float(os.getenv("CAST_REFRESH_INTERVAL", "6")),
             cast_known_hosts=known_hosts,

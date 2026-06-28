@@ -7,9 +7,11 @@ import unittest
 import numpy as np
 
 from src.audio.levels import (
+    LevelMeterState,
     calculate_audio_levels,
     combine_levels_for_display,
     map_linear_to_display,
+    meter_display_value,
 )
 
 
@@ -28,12 +30,36 @@ class TestAudioLevels(unittest.TestCase):
         self.assertGreater(levels.peak_linear, 0.0)
 
     def test_display_mapping_hot_line_in_not_always_max(self):
-        # ~-12 dB RMS — should sit around mid/high bars, not pegged at 1.0
         rms = 10 ** (-12 / 20)
         peak = 10 ** (-6 / 20)
-        value = combine_levels_for_display(rms, peak, floor_db=-50, ceil_db=0, gain=1.0)
-        self.assertGreater(value, 0.4)
-        self.assertLess(value, 0.95)
+        value = combine_levels_for_display(rms, peak, floor_db=-58, ceil_db=6, gain=1.0)
+        self.assertGreater(value, 0.35)
+        self.assertLess(value, 0.92)
+
+    def test_auto_range_tracks_dynamics(self):
+        state = LevelMeterState(auto_peak=0.08)
+        loud = meter_display_value(
+            10 ** (-8 / 20),
+            10 ** (-5 / 20),
+            floor_db=-58,
+            ceil_db=6,
+            gain=1.0,
+            auto_range=True,
+            auto_decay=0.993,
+            state=state,
+        )
+        quiet = meter_display_value(
+            10 ** (-22 / 20),
+            10 ** (-18 / 20),
+            floor_db=-58,
+            ceil_db=6,
+            gain=1.0,
+            auto_range=True,
+            auto_decay=0.993,
+            state=state,
+        )
+        self.assertGreater(loud, quiet)
+        self.assertLess(loud, 1.0)
 
     def test_display_mapping_silence_is_zero(self):
         self.assertEqual(map_linear_to_display(0.0), 0.0)

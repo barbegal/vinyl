@@ -128,8 +128,33 @@ else
     _env_changed=1
   fi
   if ! grep -qE '^AUDIO_LEVEL_FLOOR_DB=' "$APP_DIR/.env" 2>/dev/null; then
-    printf 'AUDIO_LEVEL_FLOOR_DB=-50\nAUDIO_LEVEL_CEIL_DB=0\n' >>"$APP_DIR/.env"
+    printf 'AUDIO_LEVEL_FLOOR_DB=-58\nAUDIO_LEVEL_CEIL_DB=6\n' >>"$APP_DIR/.env"
     echo "  added AUDIO_LEVEL_FLOOR_DB / AUDIO_LEVEL_CEIL_DB for bar meter scaling"
+    _env_changed=1
+  fi
+  if grep -qE '^AUDIO_LEVEL_CEIL_DB=0(\.0)?$' "$APP_DIR/.env" 2>/dev/null; then
+    sed -i 's/^AUDIO_LEVEL_CEIL_DB=.*/AUDIO_LEVEL_CEIL_DB=6/' "$APP_DIR/.env"
+    echo "  set AUDIO_LEVEL_CEIL_DB=6 (wider meter headroom)"
+    _env_changed=1
+  fi
+  if ! grep -qE '^AUDIO_LEVEL_AUTO_RANGE=' "$APP_DIR/.env" 2>/dev/null; then
+    printf 'AUDIO_LEVEL_AUTO_RANGE=1\nAUDIO_LEVEL_AUTO_DECAY=0.993\n' >>"$APP_DIR/.env"
+    echo "  added AUDIO_LEVEL_AUTO_RANGE for VU-style bar dynamics"
+    _env_changed=1
+  fi
+  if ! grep -qE '^CAST_STREAM_EQ=' "$APP_DIR/.env" 2>/dev/null; then
+    printf 'CAST_STREAM_EQ=1\n' >>"$APP_DIR/.env"
+    echo "  enabled CAST_STREAM_EQ (tames tinny USB line-in)"
+    _env_changed=1
+  fi
+  if grep -qE '^CAST_HIGH_CUT_HZ=(0|14000)$' "$APP_DIR/.env" 2>/dev/null; then
+    sed -i 's/^CAST_HIGH_CUT_HZ=.*/CAST_HIGH_CUT_HZ=12000/' "$APP_DIR/.env"
+    echo "  set CAST_HIGH_CUT_HZ=12000 (warmer cast EQ)"
+    _env_changed=1
+  fi
+  if ! grep -qE '^CAST_STEREO_MODE=' "$APP_DIR/.env" 2>/dev/null; then
+    printf 'CAST_STEREO_MODE=duplicate_r\n' >>"$APP_DIR/.env"
+    echo "  set CAST_STEREO_MODE=duplicate_r (run scripts/introspect_audio.sh to verify)"
     _env_changed=1
   fi
   if grep -qE '^CAST_INPUT_GAIN_DB=-(9|15)(\.0)?$' "$APP_DIR/.env" 2>/dev/null; then
@@ -153,6 +178,9 @@ else
     echo "  .env sanitized — if boot still fails, compare with .env.example"
   fi
   unset _env_changed _auto_val
+  echo ""
+  echo "=== sync missing .env keys from .env.example ==="
+  bash "$APP_DIR/scripts/sync_env.sh"
 fi
 
 echo ""

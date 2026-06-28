@@ -13,6 +13,13 @@ class AudioLevels:
     peak_db: float
 
 
+@dataclass
+class LevelMeterState:
+    """Rolling peak reference for auto-ranging bar meters."""
+
+    auto_peak: float = 0.06
+
+
 def _linear_to_db(value: float) -> float:
     safe = max(float(value), 1e-12)
     return 20.0 * float(np.log10(safe))
@@ -20,8 +27,8 @@ def _linear_to_db(value: float) -> float:
 
 def map_linear_to_display(
     linear: float,
-    floor_db: float = -50.0,
-    ceil_db: float = 0.0,
+    floor_db: float = -58.0,
+    ceil_db: float = 6.0,
     gain: float = 1.0,
 ) -> float:
     """Map linear amplitude (~0–1) to a 0–1 bar height using a dB window."""
@@ -38,14 +45,39 @@ def map_linear_to_display(
 def combine_levels_for_display(
     rms_linear: float,
     peak_linear: float,
-    floor_db: float = -50.0,
-    ceil_db: float = 0.0,
+    floor_db: float = -58.0,
+    ceil_db: float = 6.0,
     gain: float = 1.0,
 ) -> float:
     """Blend RMS (body) and peak (transients) for a responsive meter."""
     rms_v = map_linear_to_display(rms_linear, floor_db, ceil_db, gain)
     peak_v = map_linear_to_display(peak_linear, floor_db, ceil_db, gain)
     return max(0.0, min(1.0, rms_v * 0.55 + peak_v * 0.45))
+
+
+def meter_display_value(
+    rms_linear: float,
+    peak_linear: float,
+    *,
+    floor_db: float,
+    ceil_db: float,
+    gain: float,
+    auto_range: bool,
+    auto_decay: float,
+    state: LevelMeterState | None,
+) -> float:
+    """Apply dB mapping plus optional rolling auto-range (VU-style dynamics)."""
+    raw = combine_levels_for_display(
+        rms_linear, peak_linear, floor_db=floor_db, ceil_db=ceil_db, gain=gain
+    )
+    if not auto_range or state is None:
+        return raw
+    decay = max(0.9, min(0.999, auto_decay))
+    if raw > state.auto_peak:
+        state.auto_peak = min(1.0, max(raw, state.auto_peak * 0.98 + raw * 0.02))
+    else:
+        state.auto_peak = max(0.035, state.auto_peak * decay)
+    return max(0.0, min(1.0, raw / state.auto_peak))
 
 
 def calculate_audio_levels(samples: np.ndarray) -> AudioLevels:

@@ -41,12 +41,17 @@ class TestStreamController(unittest.TestCase):
         self.assertIn("flac", chain)
         self.assertIn("mp3", chain)
 
+    def test_duplicate_r_pan(self) -> None:
+        filt = build_stream_audio_filter(self._settings(cast_stereo_mode="duplicate_r"))
+        self.assertIn("pan=stereo|c0=c1|c1=c1", filt)
+
     def test_profile_live_from_env(self) -> None:
         os.environ["CAST_STREAM_PROFILE"] = "live"
         try:
             s = AppSettings.from_env()
             self.assertEqual(s.cast_stream_codec, "wav")
-            self.assertFalse(s.cast_stream_eq)
+            self.assertTrue(s.cast_stream_eq)
+            self.assertEqual(s.stream_high_cut_hz, 12000)
             self.assertEqual(s.cast_ffmpeg_queue_size, 64)
         finally:
             os.environ.pop("CAST_STREAM_PROFILE", None)

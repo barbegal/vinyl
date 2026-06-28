@@ -5,7 +5,7 @@ import tkinter as tk
 from typing import TYPE_CHECKING, Callable, Optional
 
 from src.audio.alsa_device import capture_is_shared, resolve_capture_device
-from src.audio.levels import combine_levels_for_display
+from src.audio.levels import LevelMeterState
 from src.boot_timing import log_milestone
 from src.config.settings import AppSettings
 from src.display.bars_widget import AudioBarsWidget
@@ -43,6 +43,8 @@ class FullscreenApp:
         self._list_width = self._screen_w // 2
 
         self.root = root or tk.Tk()
+
+        self._meter_state = LevelMeterState()
 
         self.listener: Optional[AudioInputListener] = None
         self.discovery: Optional[CastGroupDiscovery] = None
@@ -292,6 +294,9 @@ class FullscreenApp:
             level_gain=self.settings.level_display_gain,
             level_floor_db=self.settings.level_floor_db,
             level_ceil_db=self.settings.level_ceil_db,
+            level_auto_range=self.settings.level_auto_range,
+            level_auto_decay=self.settings.level_auto_decay,
+            meter_state=self._meter_state,
         )
         self.bars.place(
             x=layout["bars_x"],
@@ -836,14 +841,7 @@ class FullscreenApp:
             snapshot = self.listener.get_latest_snapshot()
             rms = snapshot.levels.rms_linear
             peak = snapshot.levels.peak_linear
-        gain = self.settings.level_display_gain
-        snap["level"] = combine_levels_for_display(
-            rms,
-            peak,
-            floor_db=self.settings.level_floor_db,
-            ceil_db=self.settings.level_ceil_db,
-            gain=gain,
-        )
+        snap["level"] = self.bars.display_level(rms, peak)
         snap["rms"] = rms
         snap["peak"] = peak
         return snap
