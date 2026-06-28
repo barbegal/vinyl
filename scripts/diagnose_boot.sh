@@ -59,7 +59,13 @@ run_diagnosis() {
   echo ""
   echo "=== audio / cast ==="
   if [[ -f "$APP_DIR/.env" ]]; then
-    grep -E '^USB_ALSA_DEVICE=|^CAST_DISCOVERY' "$APP_DIR/.env" 2>/dev/null | sed 's/^/  /' || true
+    grep -E '^USB_ALSA_DEVICE=|^CAST_DISCOVERY|^VINYL_AUTO_CAST=' "$APP_DIR/.env" 2>/dev/null | sed 's/^/  /' || true
+    head -1 "$APP_DIR/.env" | grep -qE '^@' && \
+      echo "  ERROR: .env line 1 starts with @ — run: bash scripts/recover.sh"
+    grep -qE '^GOOGLE_GROUPS_ONLY=' "$APP_DIR/.env" 2>/dev/null && \
+      echo "  NOTE: obsolete GOOGLE_GROUPS_ONLY in .env — run: bash scripts/recover.sh"
+    grep -qE '^VINYL_AUTO_CAST=[^"].*[[:space:]]' "$APP_DIR/.env" 2>/dev/null && \
+      echo "  ERROR: VINYL_AUTO_CAST needs quotes — run: bash scripts/recover.sh"
   fi
   if command -v arecord >/dev/null; then
     arecord -l 2>/dev/null | grep -E '^card |USB' | sed 's/^/  /' || echo "  (no arecord devices)"
@@ -72,6 +78,9 @@ run_diagnosis() {
     if [[ -f "$p" ]]; then
       echo "$p:"
       grep -E '^(dtoverlay=pitft|dtparam=spi|dtparam=i2c|dtoverlay=vc4|disable_splash)' "$p" 2>/dev/null | sed 's/^/  /' || echo "  (no pitft line)"
+      if grep -qE '^dtoverlay=pitft28-resistive' "$p" 2>/dev/null; then
+        echo "  WARNING: pitft28-resistive — capacitive panel needs 28c: sudo bash scripts/recover.sh --display 270 28c"
+      fi
       grep -qE '^dtparam=spi=on' "$p" 2>/dev/null || echo "  WARNING: no 'dtparam=spi=on' — pitft overlay CANNOT bind → no /dev/fb1"
       if grep -qE '^dtoverlay=pitft28.*drm' "$p" 2>/dev/null; then
         echo "  WARNING: overlay has ,drm — black TFT. Run: bash scripts/recover.sh --display"
@@ -81,7 +90,7 @@ run_diagnosis() {
         echo "        If fb1 exists but TFT is black, try 'vc4-fkms-v3d' instead, or add 'fbcon=map:10' to cmdline.txt."
       fi
       dup="$(grep -c '^disable_splash=' "$p" 2>/dev/null || echo 0)"
-      [[ "$dup" -gt 1 ]] && echo "  WARNING: duplicate disable_splash lines — run: sudo ./scripts/setup_pitft.sh 270 28r"
+      [[ "$dup" -gt 1 ]] && echo "  WARNING: duplicate disable_splash lines — run: sudo ./scripts/setup_pitft.sh 270 28c"
       btn="$(grep -c '^dtoverlay=gpio-key,gpio=' "$p" 2>/dev/null || echo 0)"
       if [[ "$btn" -eq 0 ]]; then
         echo "  WARNING: no plate button overlays — run: sudo ./scripts/setup_pitft_buttons.sh"

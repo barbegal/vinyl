@@ -15,7 +15,7 @@ DISPLAY_FIX=0
 STRIP_BUTTONS=0
 REPAIR_CONFIG=0
 ROTATE=270
-PANEL=28r
+PANEL=28c
 
 usage() {
   cat <<EOF
@@ -99,13 +99,41 @@ if [[ ! -f "$APP_DIR/.env" ]]; then
   cp "$APP_DIR/.env.example" "$APP_DIR/.env"
   echo "  created .env from .env.example"
 else
+  _env_changed=0
   if head -1 "$APP_DIR/.env" | grep -qE '^@'; then
     sed -i '1{/^@/d;}' "$APP_DIR/.env"
     echo "  removed invalid first line from .env (git diff header)"
+    _env_changed=1
   fi
+  if grep -qE '^GOOGLE_GROUPS_ONLY=' "$APP_DIR/.env" 2>/dev/null; then
+    sed -i '/^GOOGLE_GROUPS_ONLY=/d' "$APP_DIR/.env"
+    echo "  removed obsolete GOOGLE_GROUPS_ONLY from .env"
+    _env_changed=1
+  fi
+  if grep -qE '^VINYL_AUTO_CAST=' "$APP_DIR/.env" 2>/dev/null \
+     && grep -qE '^VINYL_AUTO_CAST=[^"].*[[:space:]]' "$APP_DIR/.env" 2>/dev/null; then
+    _auto_val="$(grep -E '^VINYL_AUTO_CAST=' "$APP_DIR/.env" | head -1 | cut -d= -f2-)"
+    sed -i "s|^VINYL_AUTO_CAST=.*|VINYL_AUTO_CAST=\"${_auto_val}\"|" "$APP_DIR/.env"
+    echo "  quoted VINYL_AUTO_CAST in .env (unquoted spaces break boot)"
+    _env_changed=1
+  fi
+  if [[ "$_env_changed" -eq 1 ]]; then
+    echo "  .env sanitized — if boot still fails, compare with .env.example"
+  fi
+  unset _env_changed _auto_val
 fi
 
 if command -v systemctl >/dev/null 2>&1; then
+  echo ""
+  echo "=== getty / autologin ==="
+  if systemctl is-failed getty@tty1.service 2>/dev/null | grep -q failed; then
+    sudo systemctl reset-failed getty@tty1.service 2>/dev/null || true
+    sudo systemctl start getty@tty1.service 2>/dev/null || true
+    echo "  reset failed getty@tty1 (was blocking startx on tty1)"
+  else
+    echo "  getty@tty1: $(systemctl is-active getty@tty1.service 2>/dev/null || echo unknown)"
+  fi
+
   echo ""
   echo "=== SSH ==="
   if command -v raspi-config >/dev/null 2>&1; then
@@ -150,6 +178,25 @@ if [[ "$INSTALL_BUTTONS" -eq 1 ]]; then
   echo "=== plate buttons (GPIO 17/22/23/27 — NOT 25) ==="
   sudo bash "$APP_DIR/scripts/setup_pitft_buttons.sh"
 fi
+
+_resistive_overlay=0
+for _cfg in /boot/firmware/config.txt /boot/config.txt; do
+  if [[ -f "$_cfg" ]] && grep -qE '^dtoverlay=pitft28-resistive' "$_cfg" 2>/dev/null; then
+    _resistive_overlay=1
+    break
+  fi
+done
+if [[ "$_resistive_overlay" -eq 1 && "$DISPLAY_FIX" -eq 0 && "$REPAIR_CONFIG" -eq 0 ]]; then
+  echo ""
+  echo "=== display: pitft28-resistive → 28c (capacitive panel) ==="
+  for _cfg in /boot/firmware/config.txt /boot/config.txt; do
+    if [[ -f "$_cfg" ]] && grep -qE '^dtoverlay=pitft28.*drm' "$_cfg" 2>/dev/null; then
+      sudo sed -i '/^dtoverlay=pitft28/s/,drm//g; s/drm,//g' "$_cfg"
+    fi
+  done
+  sudo bash "$APP_DIR/scripts/setup_pitft.sh" "$ROTATE" "28c" "$USER_NAME"
+fi
+unset _resistive_overlay _cfg
 
 echo ""
 if [[ -x "$APP_DIR/.venv/bin/python" ]]; then

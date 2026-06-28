@@ -40,7 +40,7 @@ if bash "$APP_DIR/scripts/start_app.sh" >>"$LOG" 2>&1; then
 fi
 
 echo "start_app.sh failed — see $LOG" >>"$LOG"
-if [[ -x "$APP_DIR/.venv/bin/python" ]]; then
+if [ -x "$APP_DIR/.venv/bin/python" ]; then
   "$APP_DIR/.venv/bin/python" "$APP_DIR/scripts/show_boot_error.py" "start_app.sh failed" >>"$LOG" 2>&1 || true
 fi
 # Keep X open for SSH debugging.
