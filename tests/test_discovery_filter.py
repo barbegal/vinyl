@@ -86,5 +86,35 @@ class TestDiscoverySort(unittest.TestCase):
         self.assertEqual(len(result), 2)
 
 
+    def test_merge_keeps_existing_when_incoming_is_smaller(self) -> None:
+        a = make_cast_target(
+            "00000000-0000-0000-0000-000000000001",
+            "Upper",
+            "10.0.0.1",
+            8009,
+            True,
+            "Group",
+        )
+        b = make_cast_target(
+            "00000000-0000-0000-0000-000000000002",
+            "Kitchen",
+            "10.0.0.2",
+            8009,
+            False,
+            "Speaker",
+        )
+        c = make_cast_target(
+            "00000000-0000-0000-0000-000000000003",
+            "Bottom",
+            "10.0.0.3",
+            8009,
+            True,
+            "Group",
+        )
+        merged = CastGroupDiscovery.merge_targets([a, b], [c])
+        self.assertEqual(len(merged), 3)
+        self.assertEqual({t.name for t in merged}, {"Upper", "Kitchen", "Bottom"})
+
+
 if __name__ == "__main__":
     unittest.main()

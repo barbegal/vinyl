@@ -49,6 +49,7 @@ class FullscreenApp:
         self._active_uuid: str | None = None
         self._focus_index: int | None = None
         self._targets_signature: tuple | None = None
+        self._list_row_h = 36
         self._auto_after_id: str | None = None
         self._refresh_ms = max(2000, int(settings.cast_refresh_interval * 1000))
 
@@ -249,8 +250,26 @@ class FullscreenApp:
         )
         self.list_panel.pack_propagate(False)
 
-        self.targets_frame = tk.Frame(self.list_panel, bg=PANEL_BG)
-        self.targets_frame.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+        self._list_canvas = tk.Canvas(
+            self.list_panel,
+            bg=PANEL_BG,
+            highlightthickness=0,
+            borderwidth=0,
+        )
+        self._list_canvas.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+        self.targets_frame = tk.Frame(self._list_canvas, bg=PANEL_BG)
+        self._list_canvas.create_window(
+            (0, 0),
+            window=self.targets_frame,
+            anchor="nw",
+            width=max(80, layout["list_w"] - 8),
+        )
+        self.targets_frame.bind(
+            "<Configure>",
+            lambda _e: self._list_canvas.configure(
+                scrollregion=self._list_canvas.bbox("all"),
+            ),
+        )
 
         self.bars = AudioBarsWidget(
             self.root,
@@ -383,6 +402,24 @@ class FullscreenApp:
         else:
             self._focus_index = max(0, min(len(self.targets) - 1, self._focus_index + delta))
         self._apply_target_styles()
+        self._scroll_focused_into_view()
+
+    def _scroll_focused_into_view(self) -> None:
+        if self._focus_index is None or self._focus_index >= len(self._target_buttons):
+            return
+        btn = self._target_buttons[self._focus_index]
+        self.targets_frame.update_idletasks()
+        self._list_canvas.update_idletasks()
+        canvas_h = max(1, self._list_canvas.winfo_height())
+        total_h = max(canvas_h, self.targets_frame.winfo_reqheight())
+        y0 = btn.winfo_y()
+        y1 = y0 + btn.winfo_height()
+        top = self._list_canvas.canvasy(0)
+        bottom = top + canvas_h
+        if y0 < top:
+            self._list_canvas.yview_moveto(y0 / total_h)
+        elif y1 > bottom:
+            self._list_canvas.yview_moveto(max(0.0, (y1 - canvas_h) / total_h))
 
     def _select_focused(self) -> None:
         if self._focus_index is not None and self._focus_index < len(self.targets):
@@ -508,11 +545,15 @@ class FullscreenApp:
                 parent_bg=PANEL_BG,
                 font_size=11,
                 radius=12,
+                height=self._list_row_h,
             )
-            btn.pack(fill=tk.BOTH, expand=True, pady=2)
+            btn.pack(fill=tk.X, pady=2)
             self._target_buttons.append(btn)
 
         self._apply_target_styles()
+        self.targets_frame.update_idletasks()
+        self._list_canvas.configure(scrollregion=self._list_canvas.bbox("all"))
+        self._scroll_focused_into_view()
 
     def _set_subtitle(self, text: str, color: str = ON_SURFACE_VARIANT) -> None:
         self.subtitle_var.set(text)
@@ -551,7 +592,11 @@ class FullscreenApp:
         elif self._auto_cast_waiting():
             self._set_subtitle(self._auto_cast_wait_text())
         elif self.targets:
-            self._set_subtitle(self._idle_subtitle)
+            count = len(self.targets)
+            if count == 1:
+                self._set_subtitle(self._idle_subtitle)
+            else:
+                self._set_subtitle(f"{count} speakers — tap to cast")
         else:
             self._set_subtitle("Scanning…")
 
@@ -615,7 +660,10 @@ class FullscreenApp:
             ).start()
             return
 
-        self._apply_refresh_targets(self.discovery.discover(wait_seconds=0.0))
+        self._apply_refresh_targets(
+            self.discovery.discover(wait_seconds=1.0),
+            merge=True,
+        )
 
     def _refresh_worker(self) -> None:
         import time
@@ -640,7 +688,16 @@ class FullscreenApp:
         self._scan_busy = False
         self._apply_refresh_targets(targets)
 
-    def _apply_refresh_targets(self, targets: list["CastTarget"]) -> None:
+    def _apply_refresh_targets(
+        self,
+        targets: list["CastTarget"],
+        *,
+        merge: bool = False,
+    ) -> None:
+        if merge and self.targets:
+            from src.cast.group_discovery import CastGroupDiscovery
+
+            targets = CastGroupDiscovery.merge_targets(self.targets, targets)
         self.targets = targets
         signature = self._signature(self.targets)
 
@@ -663,7 +720,9 @@ class FullscreenApp:
         self._update_status_text()
 
     def _auto_refresh(self) -> None:
-        self.refresh_targets(announce=False)
+        if self.discovery is not None:
+            found = self.discovery.discover(wait_seconds=1.0)
+            self._apply_refresh_targets(found, merge=True)
         self._auto_after_id = self.root.after(self._refresh_ms, self._auto_refresh)
 
     def stop_cast(self) -> None:

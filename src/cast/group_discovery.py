@@ -100,6 +100,17 @@ class CastGroupDiscovery:
     def _sort_targets(targets: list[CastTarget]) -> list[CastTarget]:
         return sorted(targets, key=lambda t: (not t.is_group, t.name.lower()))
 
+    @staticmethod
+    def merge_targets(
+        existing: list[CastTarget],
+        incoming: list[CastTarget],
+    ) -> list[CastTarget]:
+        """Union by uuid — mDNS snapshots are flaky; never drop known speakers."""
+        merged: dict[str, CastTarget] = {t.uuid: t for t in existing}
+        for target in incoming:
+            merged[target.uuid] = target
+        return CastGroupDiscovery._sort_targets(list(merged.values()))
+
     def _stop_browser(self) -> None:
         if self._browser is not None:
             try:
