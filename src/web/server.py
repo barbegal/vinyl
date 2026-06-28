@@ -197,11 +197,20 @@ INDEX_HTML = """<!DOCTYPE html>
   #status.error { color:var(--error); }
   button.icon {
     border:none; cursor:pointer; border-radius:50%;
-    width:40px; height:40px; font-size:18px; line-height:1;
+    width:44px; height:44px; font-size:18px; line-height:1;
     background:var(--surface); color:var(--on-var);
+    display:inline-flex; align-items:center; justify-content:center;
+    transition:transform .12s ease, background .12s ease, color .12s ease, box-shadow .12s ease;
+    touch-action:manipulation; user-select:none;
   }
-  button.icon:active { background:var(--primary-c); color:#fff; }
-  #refresh.spinning { animation:spin 0.8s linear infinite; }
+  button.icon:hover { background:var(--surface-high); color:var(--on); }
+  button.icon.pressed { transform:scale(0.92); background:var(--primary-c); color:#fff; }
+  button.icon.loading {
+    pointer-events:none; background:var(--surface-high); color:var(--success);
+    box-shadow:0 0 0 2px rgba(110,207,148,.35);
+  }
+  button.icon .spin-icon { display:inline-block; line-height:1; }
+  button.icon.loading .spin-icon { animation:spin .65s linear infinite; }
   @keyframes spin { to { transform:rotate(360deg); } }
   main {
     flex:1; display:flex; gap:12px; padding:12px;
@@ -209,16 +218,39 @@ INDEX_HTML = """<!DOCTYPE html>
   }
   #speakers { flex:1; display:flex; flex-direction:column; gap:8px; min-width:0; }
   .speaker {
-    display:flex; align-items:center; justify-content:space-between; gap:8px;
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
     padding:14px 16px; border-radius:14px; cursor:pointer;
     background:var(--surface); border:2px solid transparent;
     color:var(--on); font-size:15px; font-weight:600; text-align:left;
+    width:100%; font-family:inherit;
+    transition:transform .12s ease, background .12s ease, border-color .12s ease,
+               opacity .15s ease, box-shadow .12s ease;
+    touch-action:manipulation; user-select:none;
   }
-  .speaker:active { background:var(--surface-high); }
+  .speaker:hover { background:var(--surface-high); }
+  .speaker.pressed { transform:scale(0.98); background:var(--surface-high); }
   .speaker.active { background:var(--primary); border-color:var(--success); color:#fff; }
-  .speaker.busy { opacity:0.55; pointer-events:none; }
-  .speaker .tag { font-size:11px; font-weight:700; color:var(--on-var); }
+  .speaker.active.pressed { background:var(--primary-c); }
+  .speaker.pending {
+    pointer-events:none; border-color:var(--success);
+    box-shadow:0 0 0 2px rgba(110,207,148,.35);
+  }
+  .speaker.active.pending { background:var(--primary-c); }
+  .speaker.dimmed { opacity:0.45; pointer-events:none; }
+  .speaker .label { flex:1; min-width:0; display:flex; align-items:center; gap:8px; }
+  .speaker .name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .speaker .tag { font-size:11px; font-weight:700; color:var(--on-var); flex-shrink:0; }
   .speaker.active .tag { color:rgba(255,255,255,.8); }
+  .btn-spinner {
+    width:18px; height:18px; flex-shrink:0;
+    border:2px solid rgba(154,166,184,.35);
+    border-top-color:var(--success);
+    border-radius:50%;
+    animation:spin .65s linear infinite;
+  }
+  .speaker.active .btn-spinner {
+    border-color:rgba(255,255,255,.35); border-top-color:#fff;
+  }
   .empty { color:var(--on-var); text-align:center; padding:28px 8px; font-weight:600; }
   #viz {
     width:42%; max-width:300px; min-height:220px; border-radius:14px;
@@ -236,7 +268,7 @@ INDEX_HTML = """<!DOCTYPE html>
 <body>
   <header>
     <div id="status">Connecting…</div>
-    <button class="icon" id="refresh" title="Refresh">&#8635;</button>
+    <button class="icon" id="refresh" title="Refresh" type="button"><span class="spin-icon">&#8635;</span></button>
   </header>
   <main>
     <div id="speakers"><div class="empty">Loading…</div></div>
@@ -248,6 +280,38 @@ INDEX_HTML = """<!DOCTYPE html>
   const speakersEl = document.getElementById("speakers");
   const refreshBtn = document.getElementById("refresh");
   const viz = document.getElementById("viz");
+
+  let pendingCastUuid = null;
+  let refreshPending = false;
+  let pollTimer = null;
+
+  function bindPressFeedback(el) {
+    const press = () => el.classList.add("pressed");
+    const release = () => el.classList.remove("pressed");
+    el.addEventListener("pointerdown", press);
+    el.addEventListener("pointerup", release);
+    el.addEventListener("pointerleave", release);
+    el.addEventListener("pointercancel", release);
+  }
+  bindPressFeedback(refreshBtn);
+
+  function setRefreshLoading(on) {
+    refreshBtn.classList.toggle("loading", on);
+    refreshBtn.setAttribute("aria-busy", on ? "true" : "false");
+  }
+
+  function pollBurst() {
+    poll();
+    let n = 0;
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(() => {
+      poll();
+      if (++n >= 24) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+    }, 100);
+  }
 
   const BAR_COUNT = 28;
   const history = new Array(BAR_COUNT).fill(0);
@@ -280,37 +344,61 @@ INDEX_HTML = """<!DOCTYPE html>
       t => t.uuid + "|" + t.name + "|" + (t.is_group ? "1" : "0") + "|" + (t.active ? "1" : "0")
     ).join(";");
   }
-  function renderSpeakers(targets, busy) {
-    const newSig = targetsSig(targets) + "|b:" + (busy ? "1" : "0");
+  function renderSpeakers(targets, busy, scanning) {
+    const newSig = targetsSig(targets)
+      + "|b:" + (busy ? "1" : "0")
+      + "|s:" + (scanning ? "1" : "0")
+      + "|p:" + (pendingCastUuid || "");
     if (newSig === speakersSig) return;
     speakersSig = newSig;
     speakersEl.innerHTML = "";
     if (!targets.length) {
       const e = document.createElement("div");
       e.className = "empty";
-      e.textContent = "No speakers found";
+      e.textContent = scanning ? "Searching for speakers…" : "No speakers found";
       speakersEl.appendChild(e);
       return;
     }
     for (const t of targets) {
       const el = document.createElement("button");
-      el.className = "speaker" + (t.active ? " active" : "") + (busy ? " busy" : "");
-      el.disabled = !!busy;
+      el.type = "button";
+      const isPending = pendingCastUuid === t.uuid;
+      const dimmed = busy && !t.active && !isPending;
+      el.className = "speaker"
+        + (t.active ? " active" : "")
+        + (isPending ? " pending" : "")
+        + (dimmed ? " dimmed" : "");
+      el.setAttribute("aria-busy", isPending ? "true" : "false");
+
+      const label = document.createElement("span");
+      label.className = "label";
       const name = document.createElement("span");
+      name.className = "name";
       name.textContent = t.name;
-      el.appendChild(name);
+      label.appendChild(name);
       if (t.is_group) {
         const tag = document.createElement("span");
         tag.className = "tag";
         tag.textContent = "group";
-        el.appendChild(tag);
+        label.appendChild(tag);
       }
+      el.appendChild(label);
+      if (isPending) {
+        const spin = document.createElement("span");
+        spin.className = "btn-spinner";
+        spin.setAttribute("aria-hidden", "true");
+        el.appendChild(spin);
+      }
+      bindPressFeedback(el);
       el.addEventListener("click", () => cast(t.uuid));
       speakersEl.appendChild(el);
     }
   }
 
   async function cast(uuid) {
+    pendingCastUuid = uuid;
+    speakersSig = "";
+    poll();
     try {
       await fetch("/api/cast", {
         method: "POST",
@@ -318,13 +406,14 @@ INDEX_HTML = """<!DOCTYPE html>
         body: JSON.stringify({ uuid }),
       });
     } catch (e) {}
-    poll();
+    pollBurst();
   }
 
   refreshBtn.addEventListener("click", async () => {
-    refreshBtn.classList.add("spinning");
+    refreshPending = true;
+    setRefreshLoading(true);
     try { await fetch("/api/refresh", { method: "POST" }); } catch (e) {}
-    setTimeout(() => refreshBtn.classList.remove("spinning"), 900);
+    pollBurst();
   });
 
   async function poll() {
@@ -333,15 +422,23 @@ INDEX_HTML = """<!DOCTYPE html>
       const s = await res.json();
       statusEl.textContent = s.status.text;
       statusEl.className = s.status.kind;
-      renderSpeakers(s.targets || [], s.busy);
-      if (s.scanning) refreshBtn.classList.add("spinning");
-      else refreshBtn.classList.remove("spinning");
+      if (s.busy && pendingCastUuid) {
+        // server acknowledged cast/stop — keep spinner until idle
+      } else if (!s.busy) {
+        pendingCastUuid = null;
+      }
+      const scanning = !!s.scanning;
+      if (!scanning && refreshPending) refreshPending = false;
+      setRefreshLoading(scanning || refreshPending);
+      renderSpeakers(s.targets || [], !!s.busy, scanning);
       history.shift();
       history.push(Math.max(0, Math.min(1, s.level || 0)));
       renderBars();
     } catch (e) {
       statusEl.textContent = "Disconnected";
       statusEl.className = "error";
+      pendingCastUuid = null;
+      setRefreshLoading(false);
     }
   }
 
@@ -390,7 +487,7 @@ MANIFEST_JSON = json.dumps(
 
 # Cache the app shell so it opens instantly (even briefly offline); API calls
 # always go to the network so speaker state is never stale.
-SERVICE_WORKER_JS = """const CACHE = "vinyl-cast-v2";
+SERVICE_WORKER_JS = """const CACHE = "vinyl-cast-v3";
 const SHELL = ["/", "/manifest.webmanifest", "/icon.svg", "/icon-maskable.svg"];
 
 self.addEventListener("install", (event) => {

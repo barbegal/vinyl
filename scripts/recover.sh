@@ -147,14 +147,14 @@ else
     echo "  enabled CAST_STREAM_EQ (tames tinny USB line-in)"
     _env_changed=1
   fi
-  if grep -qE '^CAST_HIGH_CUT_HZ=(0|14000)$' "$APP_DIR/.env" 2>/dev/null; then
-    sed -i 's/^CAST_HIGH_CUT_HZ=.*/CAST_HIGH_CUT_HZ=12000/' "$APP_DIR/.env"
-    echo "  set CAST_HIGH_CUT_HZ=12000 (warmer cast EQ)"
+  if grep -qE '^CAST_HIGH_CUT_HZ=(0|12000)$' "$APP_DIR/.env" 2>/dev/null; then
+    sed -i 's/^CAST_HIGH_CUT_HZ=.*/CAST_HIGH_CUT_HZ=14000/' "$APP_DIR/.env"
+    echo "  set CAST_HIGH_CUT_HZ=14000 (richer air than 12 kHz)"
     _env_changed=1
   fi
   if ! grep -qE '^CAST_STEREO_MODE=' "$APP_DIR/.env" 2>/dev/null; then
-    printf 'CAST_STEREO_MODE=duplicate_r\n' >>"$APP_DIR/.env"
-    echo "  set CAST_STEREO_MODE=duplicate_r (run scripts/introspect_audio.sh to verify)"
+    printf 'CAST_STEREO_MODE=stereo\n' >>"$APP_DIR/.env"
+    echo "  set CAST_STEREO_MODE=stereo (run scripts/debug_usb_stereo.sh to verify)"
     _env_changed=1
   fi
   if grep -qE '^VINYL_AUTO_CAST="Upper,Living Room Speaker"$' "$APP_DIR/.env" 2>/dev/null \
@@ -163,14 +163,14 @@ else
     echo "  set VINYL_AUTO_CAST=\"Living Room pair\" (primary speaker)"
     _env_changed=1
   fi
-  if grep -qE '^CAST_INPUT_GAIN_DB=-(9|15)(\.0)?$' "$APP_DIR/.env" 2>/dev/null; then
-    sed -i 's/^CAST_INPUT_GAIN_DB=.*/CAST_INPUT_GAIN_DB=-21/' "$APP_DIR/.env"
-    echo "  set CAST_INPUT_GAIN_DB=-21 (hot USB line-in — lower cast level)"
+  if grep -qE '^CAST_INPUT_GAIN_DB=-21(\.0)?$' "$APP_DIR/.env" 2>/dev/null; then
+    sed -i 's/^CAST_INPUT_GAIN_DB=.*/CAST_INPUT_GAIN_DB=-9/' "$APP_DIR/.env"
+    echo "  set CAST_INPUT_GAIN_DB=-9 (run scripts/tune_usb_gain.sh after lowering Mic Capture)"
     _env_changed=1
   fi
-  if grep -qE '^CAST_OUTPUT_VOLUME=0\.(28|30|35)$' "$APP_DIR/.env" 2>/dev/null; then
-    sed -i 's/^CAST_OUTPUT_VOLUME=.*/CAST_OUTPUT_VOLUME=0.22/' "$APP_DIR/.env"
-    echo "  set CAST_OUTPUT_VOLUME=0.22 (lower Chromecast playback level)"
+  if grep -qE '^CAST_OUTPUT_VOLUME=0\.22$' "$APP_DIR/.env" 2>/dev/null; then
+    sed -i 's/^CAST_OUTPUT_VOLUME=.*/CAST_OUTPUT_VOLUME=0.32/' "$APP_DIR/.env"
+    echo "  set CAST_OUTPUT_VOLUME=0.32"
     _env_changed=1
   fi
   if grep -qE '^CAST_KNOWN_HOSTS=CAST_' "$APP_DIR/.env" 2>/dev/null; then
@@ -192,6 +192,13 @@ fi
 echo ""
 echo "=== USB capture (turntable / line-in for bars + cast) ==="
 bash "$APP_DIR/scripts/setup_usb_capture.sh"
+
+if [[ -f "$APP_DIR/.env" ]] && [[ -x "$APP_DIR/scripts/tune_usb_gain.sh" ]]; then
+  echo ""
+  echo "=== USB gain (Mic Capture + CAST_INPUT_GAIN_DB) ==="
+  echo "  Tip: run while playing a record for best results:"
+  echo "  bash scripts/tune_usb_gain.sh"
+fi
 
 if command -v systemctl >/dev/null 2>&1; then
   echo ""
