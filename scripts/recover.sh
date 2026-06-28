@@ -168,9 +168,9 @@ else
     echo "  set CAST_INPUT_GAIN_DB=-9 (run scripts/tune_usb_gain.sh after lowering Mic Capture)"
     _env_changed=1
   fi
-  if grep -qE '^CAST_OUTPUT_VOLUME=0\.(22|32)$' "$APP_DIR/.env" 2>/dev/null; then
-    sed -i 's/^CAST_OUTPUT_VOLUME=.*/CAST_OUTPUT_VOLUME=0.40/' "$APP_DIR/.env"
-    echo "  set CAST_OUTPUT_VOLUME=0.40"
+  if grep -qE '^CAST_OUTPUT_VOLUME=0\.(22|32|40)$' "$APP_DIR/.env" 2>/dev/null; then
+    sed -i 's/^CAST_OUTPUT_VOLUME=.*/CAST_OUTPUT_VOLUME=0.50/' "$APP_DIR/.env"
+    echo "  set CAST_OUTPUT_VOLUME=0.50"
     _env_changed=1
   fi
   if grep -qE '^CAST_KNOWN_HOSTS=CAST_' "$APP_DIR/.env" 2>/dev/null; then

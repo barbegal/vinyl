@@ -12,7 +12,7 @@ CAST_STREAM_PROFILES: dict[str, dict[str, Any]] = {
         "cast_ffmpeg_queue_size": 64,
         "cast_rtbufsize": "16k",
         "cast_low_latency": True,
-        "stream_high_cut_hz": 14000,
+        "stream_high_cut_hz": 16000,
         "vinyl_alsa_period_size": 128,
         "vinyl_alsa_buffer_size": 512,
     },

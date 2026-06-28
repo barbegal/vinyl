@@ -36,8 +36,10 @@ class AudioCalibration:
     measured_rms_db: float = -120.0
     cast_input_gain_db: float = -9.0
     cast_high_cut_hz: int = 14000
-    cast_output_volume: float = 0.40
+    cast_output_volume: float = 0.50
     cast_stereo_mode: str = "stereo"
+    cast_eq_bass_db: float = 4.0
+    cast_eq_treble_db: float = 2.5
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -211,9 +213,11 @@ def run_calibration(
         measured_peak=best_peak,
         measured_rms_db=round(best_rms_db, 1),
         cast_input_gain_db=recommend_gain_db(best_peak),
-        cast_high_cut_hz=14000,
-        cast_output_volume=0.40,
+        cast_high_cut_hz=16000,
+        cast_output_volume=0.50,
         cast_stereo_mode="stereo",
+        cast_eq_bass_db=4.0,
+        cast_eq_treble_db=2.5,
     )
     save_calibration(cal)
     return cal
@@ -242,6 +246,10 @@ def merge_calibration(settings: AppSettings, cal: AudioCalibration | None = None
         updates["cast_output_volume"] = cal.cast_output_volume
     if not _env_explicit("CAST_STEREO_MODE"):
         updates["cast_stereo_mode"] = cal.cast_stereo_mode
+    if not _env_explicit("CAST_EQ_BASS_DB"):
+        updates["cast_eq_bass_db"] = cal.cast_eq_bass_db
+    if not _env_explicit("CAST_EQ_TREBLE_DB"):
+        updates["cast_eq_treble_db"] = cal.cast_eq_treble_db
 
     if not updates:
         return settings

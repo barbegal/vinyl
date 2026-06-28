@@ -10,7 +10,7 @@ most cheap USB line-in interfaces on this project.
 | 1. Analog | Phono / interface knob | Level **into** the USB ADC |
 | 2. ALSA capture | `Mic Capture Volume` (card-specific) | USB device digital gain **before** capture |
 | 3. ffmpeg | `CAST_INPUT_GAIN_DB` in `.env` | Small digital trim before encode (not a fix for clip) |
-| 4. ffmpeg EQ | `CAST_STREAM_EQ`, `CAST_HIGH_CUT_HZ` | Rumble + harsh USB hash |
+| 4. ffmpeg EQ | `CAST_STREAM_EQ`, `CAST_EQ_BASS_DB`, `CAST_EQ_TREBLE_DB`, `CAST_HIGH_CUT_HZ` | Rumble cut + warmth + air |
 | 5. Encode | `CAST_STREAM_CODEC=wav` (default) | Lossless LAN stream |
 | 6. Chromecast | `CAST_OUTPUT_VOLUME` | **Listening level only** — does not improve clipped tone |
 
@@ -23,7 +23,7 @@ captured; they cannot restore waveform flattened by ADC clipping.
 |--------|--------|
 | USB ADC peak (`introspect_audio.sh`) | **-12 to -6 dBFS** (peak ≈ 8k–18k, **not** 32768) |
 | After `CAST_INPUT_GAIN_DB` | **-18 to -12 dBFS** internal headroom |
-| `CAST_OUTPUT_VOLUME` | **0.32–0.45** by ear (default **0.40**) |
+| `CAST_OUTPUT_VOLUME` | **0.40–0.55** by ear (default **0.50**) |
 
 Quiet grooves at **-40 dBFS** or lower are normal; bar meters use auto-range for display.
 

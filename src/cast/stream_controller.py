@@ -102,6 +102,12 @@ def build_stream_audio_filter(settings: AppSettings) -> str:
         parts.append("pan=stereo|c0=0.5*c0+0.5*c1|c1=0.5*c0+0.5*c1")
     if settings.cast_stream_eq:
         parts.append("highpass=f=40")
+        bass = settings.cast_eq_bass_db
+        treble = settings.cast_eq_treble_db
+        if bass > 0.05:
+            parts.append(f"equalizer=f=100:width_type=o:width=1:g={bass:.1f}")
+        if treble > 0.05:
+            parts.append(f"equalizer=f=10000:width_type=o:width=1.5:g={treble:.1f}")
         if settings.stream_high_cut_hz > 0:
             parts.append(f"lowpass=f={settings.stream_high_cut_hz}")
     return ",".join(parts)

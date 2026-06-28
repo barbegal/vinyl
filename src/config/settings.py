@@ -31,12 +31,14 @@ class AppSettings:
     hls_bitrate: str = "192k"
     stream_input_gain_db: float = -9.0
     stream_high_cut_hz: int = 0
-    cast_output_volume: float = 0.40
+    cast_output_volume: float = 0.50
     cast_ffmpeg_queue_size: int = 64
     cast_rtbufsize: str = "16k"
     cast_low_latency: bool = True
     cast_stream_codec: str = "wav"
     cast_stream_eq: bool = False
+    cast_eq_bass_db: float = 4.0
+    cast_eq_treble_db: float = 2.5
     cast_stream_profile: str = "live"
     cast_stereo_mode: str = "stereo"
     vinyl_alsa_period_size: int = 128
@@ -98,7 +100,7 @@ class AppSettings:
                     "CAST_HIGH_CUT_HZ", profile, "stream_high_cut_hz", 0, int
                 )
             ),
-            cast_output_volume=float(os.getenv("CAST_OUTPUT_VOLUME", "0.40")),
+            cast_output_volume=float(os.getenv("CAST_OUTPUT_VOLUME", "0.50")),
             cast_ffmpeg_queue_size=int(
                 env_or_profile(
                     "CAST_FFMPEG_QUEUE_SIZE", profile, "cast_ffmpeg_queue_size", 64, int
@@ -122,6 +124,8 @@ class AppSettings:
             )
             if os.getenv("CAST_STREAM_EQ") is None
             else _env_bool("CAST_STREAM_EQ", False),
+            cast_eq_bass_db=float(os.getenv("CAST_EQ_BASS_DB", "4")),
+            cast_eq_treble_db=float(os.getenv("CAST_EQ_TREBLE_DB", "2.5")),
             cast_stream_profile=profile,
             cast_stereo_mode=os.getenv("CAST_STEREO_MODE", "stereo").strip().lower(),
             vinyl_alsa_period_size=int(

@@ -30,10 +30,29 @@ class TestStreamController(unittest.TestCase):
 
     def test_hifi_flac_includes_eq_when_enabled(self) -> None:
         filt = build_stream_audio_filter(
-            self._settings(cast_stream_eq=True, stream_high_cut_hz=18000)
+            self._settings(
+                cast_stream_eq=True,
+                stream_high_cut_hz=18000,
+                cast_eq_bass_db=4.0,
+                cast_eq_treble_db=2.5,
+            )
         )
         self.assertIn("highpass=f=40", filt)
+        self.assertIn("equalizer=f=100", filt)
+        self.assertIn("equalizer=f=10000", filt)
         self.assertIn("lowpass=f=18000", filt)
+
+    def test_eq_bass_treble_off_when_zero(self) -> None:
+        filt = build_stream_audio_filter(
+            self._settings(
+                cast_stream_eq=True,
+                stream_high_cut_hz=16000,
+                cast_eq_bass_db=0,
+                cast_eq_treble_db=0,
+            )
+        )
+        self.assertIn("highpass=f=40", filt)
+        self.assertNotIn("equalizer", filt)
 
     def test_codec_fallback_chain(self) -> None:
         chain = cast_codec_fallback_chain("wav")
@@ -51,7 +70,7 @@ class TestStreamController(unittest.TestCase):
             s = AppSettings.from_env()
             self.assertEqual(s.cast_stream_codec, "wav")
             self.assertTrue(s.cast_stream_eq)
-            self.assertEqual(s.stream_high_cut_hz, 12000)
+            self.assertEqual(s.stream_high_cut_hz, 16000)
             self.assertEqual(s.cast_ffmpeg_queue_size, 64)
         finally:
             os.environ.pop("CAST_STREAM_PROFILE", None)
