@@ -18,7 +18,7 @@ class AppSettings:
     fullscreen: bool = True
 
     sample_rate: int = 48_000
-    channels: int = 1
+    channels: int = 2
     block_size: int = 1024
     input_device_name: str = ""
     usb_alsa_device: str = "hw:1,0"
@@ -62,7 +62,7 @@ class AppSettings:
             screen_height=int(os.getenv("SCREEN_HEIGHT", "240")),
             fullscreen=_env_bool("FULLSCREEN", True),
             sample_rate=int(os.getenv("AUDIO_SAMPLE_RATE", "48000")),
-            channels=int(os.getenv("AUDIO_CHANNELS", "1")),
+            channels=int(os.getenv("AUDIO_CHANNELS", "2")),
             block_size=int(os.getenv("AUDIO_BLOCK_SIZE", "1024")),
             input_device_name=os.getenv("AUDIO_INPUT_DEVICE_NAME", "").strip(),
             usb_alsa_device=os.getenv("USB_ALSA_DEVICE", "hw:1,0").strip(),
