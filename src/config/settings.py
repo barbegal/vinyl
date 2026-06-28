@@ -39,6 +39,11 @@ class AppSettings:
     cast_stream_eq: bool = False
     cast_eq_bass_db: float = 4.0
     cast_eq_treble_db: float = 2.5
+    cast_dynamics: bool = True
+    cast_compressor_threshold_db: float = -14.0
+    cast_compressor_ratio: float = 2.5
+    cast_compressor_makeup_db: float = 2.5
+    cast_limiter_ceiling_db: float = -0.8
     cast_stream_profile: str = "live"
     cast_stereo_mode: str = "stereo"
     vinyl_alsa_period_size: int = 128
@@ -126,6 +131,18 @@ class AppSettings:
             else _env_bool("CAST_STREAM_EQ", False),
             cast_eq_bass_db=float(os.getenv("CAST_EQ_BASS_DB", "4")),
             cast_eq_treble_db=float(os.getenv("CAST_EQ_TREBLE_DB", "2.5")),
+            cast_dynamics=_env_bool(
+                "CAST_DYNAMICS",
+                bool(profile_value(profile, "cast_dynamics", True)),
+            )
+            if os.getenv("CAST_DYNAMICS") is None
+            else _env_bool("CAST_DYNAMICS", True),
+            cast_compressor_threshold_db=float(
+                os.getenv("CAST_COMPRESSOR_THRESHOLD_DB", "-14")
+            ),
+            cast_compressor_ratio=float(os.getenv("CAST_COMPRESSOR_RATIO", "2.5")),
+            cast_compressor_makeup_db=float(os.getenv("CAST_COMPRESSOR_MAKEUP_DB", "2.5")),
+            cast_limiter_ceiling_db=float(os.getenv("CAST_LIMITER_CEILING_DB", "-0.8")),
             cast_stream_profile=profile,
             cast_stereo_mode=os.getenv("CAST_STEREO_MODE", "stereo").strip().lower(),
             vinyl_alsa_period_size=int(

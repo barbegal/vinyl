@@ -8,6 +8,7 @@ import unittest
 from src.cast.stream_controller import (
     build_ffmpeg_stream_cmd,
     build_stream_audio_filter,
+    build_stream_dynamics_filter,
     cast_codec_fallback_chain,
 )
 from src.config.settings import AppSettings
@@ -53,6 +54,19 @@ class TestStreamController(unittest.TestCase):
         )
         self.assertIn("highpass=f=40", filt)
         self.assertNotIn("equalizer", filt)
+
+    def test_dynamics_after_eq_when_enabled(self) -> None:
+        filt = build_stream_audio_filter(
+            self._settings(cast_stream_eq=True, cast_dynamics=True, stream_high_cut_hz=16000)
+        )
+        self.assertIn("highpass=f=40", filt)
+        self.assertIn("acompressor", filt)
+        self.assertIn("alimiter", filt)
+        self.assertLess(filt.index("highpass"), filt.index("acompressor"))
+
+    def test_dynamics_off_when_disabled(self) -> None:
+        filt = build_stream_dynamics_filter(self._settings(cast_dynamics=False))
+        self.assertEqual(filt, "")
 
     def test_codec_fallback_chain(self) -> None:
         chain = cast_codec_fallback_chain("wav")

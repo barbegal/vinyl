@@ -113,6 +113,21 @@ def _ensure_cast_volume(chromecast, level: float) -> None:
         pass
 
 
+def build_stream_dynamics_filter(settings: AppSettings) -> str:
+    """Gentle compression + peak limiter — runs after EQ so boosted bass is tamed."""
+    if not settings.cast_dynamics:
+        return ""
+    threshold = settings.cast_compressor_threshold_db
+    ratio = settings.cast_compressor_ratio
+    makeup = settings.cast_compressor_makeup_db
+    limit = 10 ** (settings.cast_limiter_ceiling_db / 20.0)
+    return (
+        f"acompressor=threshold={threshold:.1f}dB:ratio={ratio:.1f}"
+        f":attack=5:release=90:makeup={makeup:.1f}:knee=3,"
+        f"alimiter=limit={limit:.4f}:attack=2:release=12:level=disabled"
+    )
+
+
 def build_stream_audio_filter(settings: AppSettings) -> str:
     parts: list[str] = []
     gain = settings.stream_input_gain_db
@@ -137,6 +152,9 @@ def build_stream_audio_filter(settings: AppSettings) -> str:
             parts.append(f"equalizer=f=10000:width_type=o:width=1.5:g={treble:.1f}")
         if settings.stream_high_cut_hz > 0:
             parts.append(f"lowpass=f={settings.stream_high_cut_hz}")
+    dynamics = build_stream_dynamics_filter(settings)
+    if dynamics:
+        parts.append(dynamics)
     return ",".join(parts)
 
 

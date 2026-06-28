@@ -9,6 +9,7 @@ CAST_STREAM_PROFILES: dict[str, dict[str, Any]] = {
     "live": {
         "cast_stream_codec": "wav",
         "cast_stream_eq": True,
+        "cast_dynamics": True,
         "cast_ffmpeg_queue_size": 64,
         "cast_rtbufsize": "16k",
         "cast_low_latency": True,
@@ -20,6 +21,7 @@ CAST_STREAM_PROFILES: dict[str, dict[str, Any]] = {
     "hifi": {
         "cast_stream_codec": "flac",
         "cast_stream_eq": True,
+        "cast_dynamics": True,
         "cast_ffmpeg_queue_size": 128,
         "cast_rtbufsize": "32k",
         "cast_low_latency": True,
@@ -31,6 +33,7 @@ CAST_STREAM_PROFILES: dict[str, dict[str, Any]] = {
     "compatible": {
         "cast_stream_codec": "mp3",
         "cast_stream_eq": True,
+        "cast_dynamics": True,
         "cast_ffmpeg_queue_size": 256,
         "cast_rtbufsize": "64k",
         "cast_low_latency": True,

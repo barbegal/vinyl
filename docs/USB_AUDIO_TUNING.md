@@ -11,10 +11,11 @@ most cheap USB line-in interfaces on this project.
 | 2. ALSA capture | `Mic Capture Volume` (card-specific) | USB device digital gain **before** capture |
 | 3. ffmpeg | `CAST_INPUT_GAIN_DB` in `.env` | Small digital trim before encode (not a fix for clip) |
 | 4. ffmpeg EQ | `CAST_STREAM_EQ`, `CAST_EQ_BASS_DB`, `CAST_EQ_TREBLE_DB`, `CAST_HIGH_CUT_HZ` | Rumble cut + warmth + air |
-| 5. Encode | `CAST_STREAM_CODEC=wav` (default) | Lossless LAN stream |
-| 6. Chromecast | `CAST_OUTPUT_VOLUME` | **Listening level only** — does not improve clipped tone |
+| 5. ffmpeg dynamics | `CAST_DYNAMICS` | Gentle compression + peak limiter after EQ |
+| 6. Encode | `CAST_STREAM_CODEC=wav` (default) | Lossless LAN stream |
+| 7. Chromecast | `CAST_OUTPUT_VOLUME` | **Listening level only** — does not improve clipped tone |
 
-**Richest tone:** fix headroom at stage **1–2**. Stages 3–6 shape and level what is already
+**Richest tone:** fix headroom at stage **1–2**. Stages 3–7 shape and level what is already
 captured; they cannot restore waveform flattened by ADC clipping.
 
 ## Targets ( loud passage on a record )
