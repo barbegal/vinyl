@@ -71,6 +71,7 @@ class FullscreenApp:
         self._pitft_keys_bound = False
         self._cast_busy = False
         self._scan_busy = False
+        self._auto_cast_done = False
 
         self._boot_debug = boot_debug
         self._network_poll_id: str | None = None
@@ -439,6 +440,7 @@ class FullscreenApp:
         target = self.targets[index]
         if ok:
             self._active_uuid = target.uuid
+            self._auto_cast_done = True
             self._apply_target_styles()
             self._set_subtitle(f"Playing on {status.target_name}", SUCCESS_FG)
         else:
@@ -515,6 +517,9 @@ class FullscreenApp:
         return None
 
     def _update_status_text(self) -> None:
+        if self._cast_busy:
+            # A connect is in flight; its own status messages take precedence.
+            return
         if (
             self.discovery is not None
             and self.discovery.last_error
@@ -525,10 +530,50 @@ class FullscreenApp:
         active_name = self._active_target_name()
         if active_name is not None:
             self._set_subtitle(f"Playing on {active_name}", SUCCESS_FG)
+        elif self._auto_cast_waiting():
+            self._set_subtitle(self._auto_cast_wait_text())
         elif self.targets:
             self._set_subtitle(self._idle_subtitle)
         else:
             self._set_subtitle("Scanning…")
+
+    def _preferred_target_index(self) -> int | None:
+        from src.cast.group_discovery import select_preferred_target
+
+        if not self.settings.auto_cast_targets:
+            return None
+        names = [target.name for target in self.targets]
+        return select_preferred_target(names, self.settings.auto_cast_targets)
+
+    def _auto_cast_waiting(self) -> bool:
+        """True while we still want to auto-connect but no preferred speaker is up."""
+        return (
+            bool(self.settings.auto_cast_targets)
+            and not self._auto_cast_done
+            and self._active_uuid is None
+            and not self._cast_busy
+            and self._preferred_target_index() is None
+        )
+
+    def _auto_cast_wait_text(self) -> str:
+        names = " / ".join(self.settings.auto_cast_targets)
+        return f"Waiting for {names}…"
+
+    def _maybe_auto_cast(self) -> None:
+        """Auto-connect to the first available preferred speaker, once per boot."""
+        if not self.settings.auto_cast_targets:
+            return
+        if self._auto_cast_done or self._cast_busy:
+            return
+        if self._active_uuid is not None:
+            # Already streaming (auto or manual) — don't override the user.
+            self._auto_cast_done = True
+            return
+        index = self._preferred_target_index()
+        if index is None:
+            return  # keep waiting; the next scan will try again
+        log_milestone(f"auto-cast → {self.targets[index].name}")
+        self._on_target_tap(index)
 
     def refresh_targets(self, announce: bool = True) -> None:
         from src.network_status import is_lan_ready, network_status_line
@@ -596,6 +641,7 @@ class FullscreenApp:
             self._active_uuid = None
 
         self._apply_target_styles()
+        self._maybe_auto_cast()
         self._update_status_text()
 
     def _auto_refresh(self) -> None:
@@ -843,6 +889,7 @@ class FullscreenApp:
         else:
             log_milestone(f"first cast scan ({len(self.targets)} target(s))")
 
+        self._maybe_auto_cast()
         self._update_status_text()
         self._startup_done = True
         self._auto_after_id = self.root.after(self._refresh_ms, self._auto_refresh)

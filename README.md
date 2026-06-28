@@ -243,6 +243,25 @@ VINYL_WEB_HOST=0.0.0.0  # 127.0.0.1 = localhost only (tunnel via Connect/SSH)
 VINYL_WEB_PORT=8080
 ```
 
+## Auto-connect on startup
+
+By default the Pi tries to start streaming automatically as soon as a preferred
+speaker is reachable — no tapping required. It keeps re-scanning the LAN until the
+first match in your priority list shows up, then connects and streams the USB
+audio to it. The TFT shows `Waiting for Upper / Living Room Speaker…` while it
+waits, then `Playing on …` once connected.
+
+Configure the priority list in `.env` (first match wins):
+
+```bash
+# Comma-separated names, highest priority first. Empty = disabled (manual only).
+VINYL_AUTO_CAST=Upper,Living Room Speaker
+```
+
+Names match case-insensitively (exact match preferred, then substring). Auto-connect
+runs once per boot; if you manually pick a different speaker or stop the stream, the
+Pi won't override your choice until the next restart.
+
 ## Generate UI screenshots
 
 ```bash

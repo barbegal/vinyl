@@ -38,6 +38,12 @@ class AppSettings:
     web_host: str = "0.0.0.0"
     web_port: int = 8080
 
+    # Speakers to auto-connect to on startup, in priority order. The app keeps
+    # scanning until the first match appears, then streams USB audio to it.
+    auto_cast_targets: list[str] = field(
+        default_factory=lambda: ["Upper", "Living Room Speaker"]
+    )
+
     @classmethod
     def from_env(cls) -> "AppSettings":
         known_raw = os.getenv("CAST_KNOWN_HOSTS", "").strip()
@@ -45,6 +51,13 @@ class AppSettings:
         plate_side = os.getenv("PLATE_BUTTONS_SIDE", "left").strip().lower()
         if plate_side not in {"left", "right"}:
             plate_side = "left"
+
+        # Unset → sensible default; empty string → feature disabled.
+        auto_raw = os.getenv("VINYL_AUTO_CAST")
+        if auto_raw is None:
+            auto_targets = ["Upper", "Living Room Speaker"]
+        else:
+            auto_targets = [s.strip() for s in auto_raw.split(",") if s.strip()]
         return cls(
             screen_width=int(os.getenv("SCREEN_WIDTH", "320")),
             screen_height=int(os.getenv("SCREEN_HEIGHT", "240")),
@@ -66,4 +79,5 @@ class AppSettings:
             web_ui_enabled=_env_bool("VINYL_WEB_UI", True),
             web_host=os.getenv("VINYL_WEB_HOST", "0.0.0.0").strip(),
             web_port=int(os.getenv("VINYL_WEB_PORT", "8080")),
+            auto_cast_targets=auto_targets,
         )

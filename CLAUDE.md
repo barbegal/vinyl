@@ -160,6 +160,7 @@ cd /home/vinyl/Desktop/vinyl && git pull && bash scripts/recover.sh && sudo rebo
 - Speaker **groups** use dynamic ports; connecting by IP alone fails
 - Pi must be on same LAN/subnet as speakers (not guest Wi-Fi)
 - `.env`: `CAST_DISCOVERY_TIMEOUT`, `CAST_REFRESH_INTERVAL`, `CAST_KNOWN_HOSTS`
+- **Auto-connect on boot**: `VINYL_AUTO_CAST` (priority name list, default `Upper,Living Room Speaker`). Hooked into the auto-refresh scan loop in `fullscreen_ui.py` (`_maybe_auto_cast`) via the pure matcher `select_preferred_target` in `group_discovery.py`; reuses the normal cast path, fires once per boot, never overrides a manual choice.
 
 ## Common pitfalls (recent history)
 

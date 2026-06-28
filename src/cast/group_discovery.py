@@ -188,6 +188,26 @@ class CastGroupDiscovery:
             self._zconf = None
 
 
+def select_preferred_target(names: list[str], preferred: list[str]) -> int | None:
+    """Index of the first target matching the priority list, or None.
+
+    For each preferred name (in order) it tries a case-insensitive exact match
+    first, then a substring match, before moving to the next preference.
+    """
+    normalized = [(idx, (name or "").strip().lower()) for idx, name in enumerate(names)]
+    for pref in preferred:
+        needle = pref.strip().lower()
+        if not needle:
+            continue
+        for idx, name in normalized:
+            if name == needle:
+                return idx
+        for idx, name in normalized:
+            if needle in name:
+                return idx
+    return None
+
+
 def make_cast_target(
     uuid: str,
     name: str,
