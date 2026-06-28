@@ -57,7 +57,7 @@ class AppSettings:
     web_port: int = 8080
 
     auto_cast_targets: list[str] = field(
-        default_factory=lambda: ["Upper", "Living Room Speaker"]
+        default_factory=lambda: ["Living Room pair"]
     )
 
     @classmethod
@@ -70,7 +70,7 @@ class AppSettings:
 
         auto_raw = os.getenv("VINYL_AUTO_CAST")
         if auto_raw is None:
-            auto_targets = ["Upper", "Living Room Speaker"]
+            auto_targets = ["Living Room pair"]
         else:
             auto_targets = [s.strip() for s in auto_raw.split(",") if s.strip()]
 

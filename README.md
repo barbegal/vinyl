@@ -273,14 +273,14 @@ VINYL_WEB_PORT=8080
 By default the Pi tries to start streaming automatically as soon as a preferred
 speaker is reachable — no tapping required. It keeps re-scanning the LAN until the
 first match in your priority list shows up, then connects and streams the USB
-audio to it. The TFT shows `Waiting for Upper / Living Room Speaker…` while it
+audio to it. The TFT shows `Waiting for Living Room pair…` while it
 waits, then `Playing on …` once connected.
 
 Configure the priority list in `.env` (first match wins):
 
 ```bash
 # Comma-separated names, highest priority first. Empty = disabled (manual only).
-VINYL_AUTO_CAST="Upper,Living Room Speaker"
+VINYL_AUTO_CAST="Living Room pair"
 ```
 
 Names match case-insensitively (exact match preferred, then substring). Auto-connect
