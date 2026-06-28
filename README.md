@@ -60,6 +60,28 @@ cp .env.example .env
 
 Update `.env` as needed, especially `USB_ALSA_DEVICE` and optionally `AUDIO_INPUT_DEVICE_NAME`.
 
+### USB / turntable gain (tone + headroom)
+
+Hot USB line-in often **clips at the ADC** (peak=32768) while cast trim only turns down
+*after* capture — that pegs meters and thins cast audio. See **`docs/USB_AUDIO_TUNING.md`**
+for the full chain, Pi-specific mixer notes, and targets.
+
+On the Pi, while playing a record:
+
+```bash
+bash scripts/tune_usb_gain.sh 3    # writes ~/.vinyl/calibration.json
+bash scripts/introspect_audio.sh 3 # verify peaks are not 32768
+```
+
+Gain values live in **`~/.vinyl/calibration.json`**, applied automatically on boot.
+Use `.env` only for explicit overrides (e.g. `CAST_INPUT_GAIN_DB=-12`).
+
+Manual capture level on the common USB PnP card (**use `cset`, not `sset`**):
+
+```bash
+amixer -c 3 cset numid=3 28   # ~45% of max; card may differ — see docs
+```
+
 ## Run locally
 
 ```bash

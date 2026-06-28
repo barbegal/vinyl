@@ -133,9 +133,14 @@ If `ui visible on tft` exceeds the SLO, check: slow SD card, extra `systemd` uni
 | **`setup_pitft.sh`** | Panel overlay + Xorg (`270 28r` or `28c`) |
 | **`detect_touch.sh`** | Capacitive vs resistive panel |
 | **`setup_rpconnect.sh`** | Optional remote TFT mirror (x11vnc) |
+| **`tune_usb_gain.sh`** | Mic Capture + `CAST_INPUT_GAIN_DB` while playing a record |
+| **`introspect_audio.sh`** | USB L/R levels, clip/stereo hints |
+| **`debug_usb_stereo.sh`** | Deep stereo debug + `/tmp/vinyl-channel-L.wav` |
 | **`discover_cast.py`** | Test Cast discovery only |
 
-Internal / dev: `kiosk_xinitrc.sh` (template), `boot_milestone.sh`, `generate_mockups.py`, `flip_display.sh` (calls `setup_pitft.sh`).
+See **`docs/USB_AUDIO_TUNING.md`** for gain staging (ADC → cast → speaker volume).
+
+Internal / dev: `kiosk_xinitrc.sh` (template), `boot_milestone.sh`, `generate_mockups.py`, `flip_display.sh` (calls `setup_pitft.sh`), `test_usb_audio.sh`.
 
 Pi recovery after pull:
 
@@ -158,7 +163,8 @@ git clone <repo-url> ~/Desktop/vinyl && cd ~/Desktop/vinyl && bash scripts/setup
 - `src/cast/stream_controller.py` — HLS ffmpeg + Chromecast
 - `src/web/server.py` — optional browser UI mirroring the TFT controls (stdlib http.server; Tk app stays source of truth via `after()`-scheduled actions)
 - `src/audio/` — sounddevice input + levels
-- `src/config/settings.py` — env-based settings (see `.env.example`)
+- `src/audio/gain_calibration.py` — USB level + cast gain → `~/.vinyl/calibration.json`
+- `src/config/settings.py` — `load_settings()` merges calibration over `.env` defaults
 - `tests/` — unittest (`python -m unittest discover -s tests`)
 
 ## Cast / network notes

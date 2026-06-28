@@ -948,8 +948,23 @@ class FullscreenApp:
             log_milestone("audio input unavailable")
         else:
             log_milestone("audio input ready")
+            threading.Thread(target=self._calibrate_audio_worker, daemon=True).start()
 
         self._poll_network(0)
+
+    def _calibrate_audio_worker(self) -> None:
+        from src.audio.gain_calibration import ensure_calibration, merge_calibration
+
+        cal = ensure_calibration(self.settings, seconds=2.0)
+        if cal is None:
+            return
+        merged = merge_calibration(self.settings, cal)
+        if merged.stream_input_gain_db != self.settings.stream_input_gain_db:
+            self.settings = merged
+            log_milestone(
+                f"audio cal: gain {cal.cast_input_gain_db:.0f}dB "
+                f"capture {cal.capture_percent}% peak {cal.measured_peak}"
+            )
 
     def _poll_network(self, attempt: int) -> None:
         from src.network_status import is_lan_ready, network_status_line

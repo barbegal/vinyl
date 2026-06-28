@@ -29,16 +29,16 @@ class AppSettings:
     ffmpeg_bin: str = "ffmpeg"
     hls_segment_seconds: int = 1
     hls_bitrate: str = "192k"
-    stream_input_gain_db: float = -21.0
+    stream_input_gain_db: float = -9.0
     stream_high_cut_hz: int = 0
-    cast_output_volume: float = 0.22
+    cast_output_volume: float = 0.32
     cast_ffmpeg_queue_size: int = 64
     cast_rtbufsize: str = "16k"
     cast_low_latency: bool = True
     cast_stream_codec: str = "wav"
     cast_stream_eq: bool = False
     cast_stream_profile: str = "live"
-    cast_stereo_mode: str = "duplicate_r"
+    cast_stereo_mode: str = "stereo"
     vinyl_alsa_period_size: int = 128
     vinyl_alsa_buffer_size: int = 512
     level_display_gain: float = 1.0
@@ -46,7 +46,7 @@ class AppSettings:
     level_ceil_db: float = 6.0
     level_auto_range: bool = True
     level_auto_decay: float = 0.993
-    level_input_trim_db: float = -21.0
+    level_input_trim_db: float = -9.0
 
     cast_discovery_timeout: float = 12.0
     cast_refresh_interval: float = 6.0
@@ -92,13 +92,13 @@ class AppSettings:
             hls_bitrate=str(
                 env_or_profile("HLS_BITRATE", profile, "hls_bitrate", "192k", str)
             ),
-            stream_input_gain_db=float(os.getenv("CAST_INPUT_GAIN_DB", "-21")),
+            stream_input_gain_db=float(os.getenv("CAST_INPUT_GAIN_DB", "-9")),
             stream_high_cut_hz=int(
                 env_or_profile(
                     "CAST_HIGH_CUT_HZ", profile, "stream_high_cut_hz", 0, int
                 )
             ),
-            cast_output_volume=float(os.getenv("CAST_OUTPUT_VOLUME", "0.22")),
+            cast_output_volume=float(os.getenv("CAST_OUTPUT_VOLUME", "0.32")),
             cast_ffmpeg_queue_size=int(
                 env_or_profile(
                     "CAST_FFMPEG_QUEUE_SIZE", profile, "cast_ffmpeg_queue_size", 64, int
@@ -123,7 +123,7 @@ class AppSettings:
             if os.getenv("CAST_STREAM_EQ") is None
             else _env_bool("CAST_STREAM_EQ", False),
             cast_stream_profile=profile,
-            cast_stereo_mode=os.getenv("CAST_STEREO_MODE", "duplicate_r").strip().lower(),
+            cast_stereo_mode=os.getenv("CAST_STEREO_MODE", "stereo").strip().lower(),
             vinyl_alsa_period_size=int(
                 env_or_profile(
                     "VINYL_ALSA_PERIOD_SIZE", profile, "vinyl_alsa_period_size", 128, int
@@ -141,7 +141,7 @@ class AppSettings:
             level_auto_decay=float(os.getenv("AUDIO_LEVEL_AUTO_DECAY", "0.993")),
             level_input_trim_db=float(
                 os.getenv("AUDIO_LEVEL_INPUT_TRIM_DB", "").strip()
-                or os.getenv("CAST_INPUT_GAIN_DB", "-21")
+                or os.getenv("CAST_INPUT_GAIN_DB", "-9")
             ),
             cast_discovery_timeout=float(os.getenv("CAST_DISCOVERY_TIMEOUT", "12")),
             cast_refresh_interval=float(os.getenv("CAST_REFRESH_INTERVAL", "6")),
@@ -152,3 +152,10 @@ class AppSettings:
             web_port=int(os.getenv("VINYL_WEB_PORT", "8080")),
             auto_cast_targets=auto_targets,
         )
+
+
+def load_settings() -> AppSettings:
+    """Load .env defaults, then apply ~/.vinyl/calibration.json for audio (unless .env overrides)."""
+    from src.audio.gain_calibration import load_settings_with_calibration
+
+    return load_settings_with_calibration()

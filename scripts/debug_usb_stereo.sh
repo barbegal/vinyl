@@ -32,8 +32,8 @@ if [[ -f "${HOME}/.asoundrc" ]]; then
 fi
 if [[ -n "$CARD" ]]; then
   echo "ALSA mixer (card $CARD):"
-  amixer -c "$CARD" sget "Mic Capture Switch" 2>/dev/null | sed 's/^/  /' || true
-  amixer -c "$CARD" sget "Mic Capture Volume" 2>/dev/null | sed 's/^/  /' || true
+  amixer -c "$CARD" cget numid=2 2>/dev/null | sed 's/^/  /' || true
+  amixer -c "$CARD" cget numid=3 2>/dev/null | sed 's/^/  /' || true
   amixer -c "$CARD" cget numid=1 2>/dev/null | sed 's/^/  /' || true
   echo ""
 fi

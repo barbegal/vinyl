@@ -87,7 +87,8 @@ l_stats = stats("L", L)
 if l_stats and l_stats[0] >= 32760:
     print("")
     print("DIAG: ADC clipping (peak=32768) — lower capture volume:")
-    print("      amixer -c <card> sset Capture 80%   # or reduce phono/interface gain")
+    print("      amixer -c <card> cset numid=3 28   # ~45%; sset often fails on USB PnP")
+    print("      see docs/USB_AUDIO_TUNING.md")
 if l_stats and l_stats[2] > -6:
     print("")
     print("DIAG: input very hot — try CAST_INPUT_GAIN_DB=-24 in .env")

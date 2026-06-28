@@ -176,7 +176,7 @@ else
   if grep -qE '^CAST_KNOWN_HOSTS=CAST_' "$APP_DIR/.env" 2>/dev/null; then
     _gain="$(sed -n 's/^CAST_KNOWN_HOSTS=CAST_INPUT_GAIN_DB=//p' "$APP_DIR/.env" | head -1)"
     sed -i '/^CAST_KNOWN_HOSTS=CAST_/d' "$APP_DIR/.env"
-    printf 'CAST_KNOWN_HOSTS=\nCAST_INPUT_GAIN_DB=%s\n' "${_gain:--21}" >>"$APP_DIR/.env"
+    printf 'CAST_KNOWN_HOSTS=\nCAST_INPUT_GAIN_DB=%s\n' "${_gain:--9}" >>"$APP_DIR/.env"
     echo "  fixed merged CAST_KNOWN_HOSTS / CAST_INPUT_GAIN_DB line in .env"
     _env_changed=1
   fi
@@ -195,9 +195,13 @@ bash "$APP_DIR/scripts/setup_usb_capture.sh"
 
 if [[ -f "$APP_DIR/.env" ]] && [[ -x "$APP_DIR/scripts/tune_usb_gain.sh" ]]; then
   echo ""
-  echo "=== USB gain (Mic Capture + CAST_INPUT_GAIN_DB) ==="
-  echo "  Tip: run while playing a record for best results:"
-  echo "  bash scripts/tune_usb_gain.sh"
+  echo "=== USB gain (~/.vinyl/calibration.json) ==="
+  if [[ -f "$HOME/.vinyl/calibration.json" ]]; then
+    echo "  calibration: $HOME/.vinyl/calibration.json"
+  else
+    echo "  no calibration yet — while playing a record:"
+    echo "  bash scripts/tune_usb_gain.sh 3"
+  fi
 fi
 
 if command -v systemctl >/dev/null 2>&1; then

@@ -55,12 +55,12 @@ def main() -> None:
             debug.log_env()
             debug.log_xorg_errors()
 
-        from src.config.settings import AppSettings
+        from src.config.settings import load_settings
 
         if debug:
             debug.log("Loading settings…")
 
-        settings = AppSettings.from_env()
+        settings = load_settings()
 
         if debug:
             debug.log("Opening main UI shell…")
