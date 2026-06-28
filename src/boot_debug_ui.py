@@ -28,6 +28,9 @@ class BootDebugPanel:
     def __init__(self, root: tk.Tk, width: int = 320, height: int = 240) -> None:
         self.root = root
         self._entries: list[tuple[str, bool]] = []
+        self._detached = False
+        self._stderr_original: Optional[IO[str]] = None
+        self._warn_handler_original = warnings.showwarning
 
         root.title("Vinyl — boot")
         root.configure(bg=_BG)
@@ -87,6 +90,8 @@ class BootDebugPanel:
         return any(is_err for _, is_err in self._entries)
 
     def _refresh_text(self) -> None:
+        if self._detached:
+            return
         self._text.configure(state=tk.NORMAL)
         self._text.delete("1.0", tk.END)
         for line, is_err in self._entries[-_MAX_LINES:]:
@@ -97,6 +102,8 @@ class BootDebugPanel:
             self._uptime_label.configure(fg=_ERR, text=self._uptime_str() + " · errors")
 
     def _paint(self) -> None:
+        if self._detached:
+            return
         if not self._has_errors():
             self._uptime_label.configure(text=self._uptime_str(), fg=_OK)
         self._refresh_text()
@@ -125,11 +132,15 @@ class BootDebugPanel:
     def log_env(self) -> None:
         self.log(f"DISPLAY={os.environ.get('DISPLAY', 'unset')}")
         self.log(f"FRAMEBUFFER={os.environ.get('FRAMEBUFFER', 'unset')}")
-        fb1 = os.path.exists("/dev/fb1")
-        if fb1:
+        fb = os.environ.get("FRAMEBUFFER", "").strip()
+        if fb and os.path.exists(fb):
+            self.log(f"{fb}=yes")
+        elif os.path.exists("/dev/fb1"):
             self.log("/dev/fb1=yes")
+        elif os.path.exists("/dev/fb0"):
+            self.log("/dev/fb0=yes")
         else:
-            self.log_error("/dev/fb1 MISSING — run setup_pitft.sh")
+            self.log_error("No framebuffer — run setup_pitft.sh")
 
     def log_xorg_errors(self, max_lines: int = 5) -> None:
         for line in read_xorg_error_lines(max_lines=max_lines):
@@ -165,6 +176,13 @@ class BootDebugPanel:
                 self.log_error(ln)
 
     def detach(self) -> None:
+        if self._detached:
+            return
+        self._detached = True
+        if isinstance(sys.stderr, StderrBootLogger) and sys.stderr._debug is self:
+            sys.stderr = sys.stderr._original
+        if warnings.showwarning is not self._warn_handler_original:
+            warnings.showwarning = self._warn_handler_original
         self._frame.destroy()
         self.root.update_idletasks()
         self.root.update()
@@ -192,8 +210,8 @@ class StderrBootLogger(IO[str]):
             self._original.write(s)
         except OSError:
             pass
-        if not s:
-            return 0
+        if not s or self._debug._detached:
+            return len(s)
         self._buf += s
         while "\n" in self._buf:
             line, self._buf = self._buf.split("\n", 1)
@@ -206,7 +224,7 @@ class StderrBootLogger(IO[str]):
             self._original.flush()
         except OSError:
             pass
-        if self._buf.strip():
+        if self._buf.strip() and not self._debug._detached:
             self._debug.log_error(self._buf.strip())
             self._buf = ""
 
@@ -243,6 +261,7 @@ def read_xorg_error_lines(max_lines: int = 5) -> list[str]:
 def attach_boot_logging(debug: BootDebugPanel) -> IO[str]:
     """Wire stderr + warnings into the on-screen boot panel."""
     original_stderr = sys.stderr
+    debug._stderr_original = original_stderr
     sys.stderr = StderrBootLogger(debug, original_stderr)
 
     def _warn_handler(
@@ -253,8 +272,10 @@ def attach_boot_logging(debug: BootDebugPanel) -> IO[str]:
         file: Optional[IO[str]] = None,
         line: Optional[str] = None,
     ) -> None:
-        debug.log_error(f"{category.__name__}: {message}")
+        if not debug._detached:
+            debug.log_error(f"{category.__name__}: {message}")
 
+    debug._warn_handler_original = warnings.showwarning
     warnings.showwarning = _warn_handler
     return original_stderr
 

@@ -12,6 +12,7 @@ from src.audio.levels import (
     combine_levels_for_display,
     map_linear_to_display,
     meter_display_value,
+    trim_linear_levels,
 )
 
 
@@ -59,7 +60,39 @@ class TestAudioLevels(unittest.TestCase):
             state=state,
         )
         self.assertGreater(loud, quiet)
-        self.assertLess(loud, 1.0)
+        self.assertLessEqual(loud, 1.0)
+
+    def test_window_auto_range_uses_recent_span(self):
+        state = LevelMeterState()
+        values = []
+        for rms_db, peak_db in [(-18, -14), (-18, -14), (-12, -8), (-12, -8), (-20, -16)] * 4:
+            values.append(
+                meter_display_value(
+                    10 ** (rms_db / 20),
+                    10 ** (peak_db / 20),
+                    floor_db=-58,
+                    ceil_db=6,
+                    gain=1.0,
+                    auto_range=True,
+                    auto_decay=0.993,
+                    state=state,
+                )
+            )
+        self.assertGreater(max(values), min(values))
+        self.assertLessEqual(max(values), 1.0)
+
+    def test_trim_linear_levels_matches_cast_gain(self):
+        rms, peak = trim_linear_levels(1.0, 1.0, -21.0)
+        self.assertAlmostEqual(peak, 10 ** (-21 / 20), places=3)
+        self.assertAlmostEqual(rms, peak, places=3)
+
+    def test_stereo_peak_uses_loudest_channel(self):
+        samples = np.zeros((1024, 2), dtype=np.float32)
+        samples[:, 0] = 0.05
+        samples[:, 1] = 0.9
+        levels = calculate_audio_levels(samples)
+        self.assertAlmostEqual(levels.peak_linear, 0.9, places=2)
+        self.assertGreater(levels.rms_linear, 0.05)
 
     def test_display_mapping_silence_is_zero(self):
         self.assertEqual(map_linear_to_display(0.0), 0.0)

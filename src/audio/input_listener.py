@@ -78,6 +78,8 @@ class AudioInputListener:
             return None
 
         hints: list[str] = []
+        for name in ("vinyl_dsnoop", "vinyl_in"):
+            hints.append(name)
         alsa_hint = portaudio_device_hint(self.alsa_device)
         if alsa_hint:
             hints.append(alsa_hint)

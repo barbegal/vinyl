@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections import deque
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -15,9 +16,10 @@ class AudioLevels:
 
 @dataclass
 class LevelMeterState:
-    """Rolling peak reference for auto-ranging bar meters."""
+    """Rolling window for auto-ranging bar meters (min–max over recent samples)."""
 
     auto_peak: float = 0.06
+    window: deque = field(default_factory=lambda: deque(maxlen=90))
 
 
 def _linear_to_db(value: float) -> float:
@@ -52,7 +54,22 @@ def combine_levels_for_display(
     """Blend RMS (body) and peak (transients) for a responsive meter."""
     rms_v = map_linear_to_display(rms_linear, floor_db, ceil_db, gain)
     peak_v = map_linear_to_display(peak_linear, floor_db, ceil_db, gain)
-    return max(0.0, min(1.0, rms_v * 0.55 + peak_v * 0.45))
+    return max(0.0, min(1.0, rms_v * 0.68 + peak_v * 0.32))
+
+
+def trim_linear_levels(
+    rms_linear: float,
+    peak_linear: float,
+    trim_db: float,
+) -> tuple[float, float]:
+    """Apply the same dB trim used for cast gain so meters match audible level."""
+    if trim_db == 0.0:
+        return rms_linear, peak_linear
+    gain = 10 ** (trim_db / 20.0)
+    return (
+        min(1.0, rms_linear * gain),
+        min(1.0, peak_linear * gain),
+    )
 
 
 def meter_display_value(
@@ -66,18 +83,25 @@ def meter_display_value(
     auto_decay: float,
     state: LevelMeterState | None,
 ) -> float:
-    """Apply dB mapping plus optional rolling auto-range (VU-style dynamics)."""
+    """Apply dB mapping plus optional rolling min–max auto-range (VU-style dynamics)."""
     raw = combine_levels_for_display(
         rms_linear, peak_linear, floor_db=floor_db, ceil_db=ceil_db, gain=gain
     )
     if not auto_range or state is None:
         return raw
-    decay = max(0.9, min(0.999, auto_decay))
-    if raw > state.auto_peak:
-        state.auto_peak = min(1.0, max(raw, state.auto_peak * 0.98 + raw * 0.02))
-    else:
-        state.auto_peak = max(0.035, state.auto_peak * decay)
-    return max(0.0, min(1.0, raw / state.auto_peak))
+
+    state.window.append(raw)
+    count = len(state.window)
+    if count < 12:
+        if raw > state.auto_peak:
+            state.auto_peak = raw
+        span = max(state.auto_peak, 0.08)
+        return max(0.0, min(1.0, raw / span))
+
+    lo = min(state.window)
+    hi = max(state.window)
+    span = max(hi - lo, 0.04)
+    return max(0.0, min(1.0, (raw - lo) / span))
 
 
 def calculate_audio_levels(samples: np.ndarray) -> AudioLevels:
@@ -86,11 +110,15 @@ def calculate_audio_levels(samples: np.ndarray) -> AudioLevels:
 
     mono = samples.astype(np.float32)
     if mono.ndim > 1:
+        peak = float(np.max(np.abs(mono)))
         mono = mono.mean(axis=1)
+    else:
+        peak = None
 
     abs_values = np.abs(mono)
     rms = float(np.sqrt(np.mean(np.square(abs_values))))
-    peak = float(np.max(abs_values))
+    if peak is None:
+        peak = float(np.max(abs_values))
 
     return AudioLevels(
         rms_linear=rms,

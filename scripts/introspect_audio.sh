@@ -67,7 +67,11 @@ if ch >= 2 and L and R:
     ll = sum(a * a for a in L) or 1
     rr = sum(b * b for b in R) or 1
     corr = lr / math.sqrt(ll * rr)
+    l_rms = math.sqrt(ll / len(L))
+    r_rms = math.sqrt(rr / len(R))
+    diff_rms = math.sqrt(sum((a - b) ** 2 for a, b in zip(L, R)) / len(L))
     print(f"  L/R correlation: {corr:.3f}")
+    print(f"  L/R rms ratio: {l_rms / max(r_rms, 1):.3f}  diff/rmsR: {diff_rms / max(r_rms, 1):.3f}")
     print("")
     if l_peak < 500 and r_peak > 2000:
         print("DIAG: signal mostly on RIGHT — set CAST_STEREO_MODE=duplicate_r")
@@ -76,16 +80,22 @@ if ch >= 2 and L and R:
     elif corr > 0.98 and abs(l_peak - r_peak) < max(l_peak, r_peak) * 0.05:
         print("DIAG: dual-mono / identical channels")
     else:
-        print("DIAG: stereo — use CAST_STEREO_MODE=stereo (or swap if L/R reversed)")
+        print("DIAG: stereo — set CAST_STEREO_MODE=stereo")
+        print("      run: bash scripts/debug_usb_stereo.sh 5")
 
 l_stats = stats("L", L)
+if l_stats and l_stats[0] >= 32760:
+    print("")
+    print("DIAG: ADC clipping (peak=32768) — lower capture volume:")
+    print("      amixer -c <card> sset Capture 80%   # or reduce phono/interface gain")
 if l_stats and l_stats[2] > -6:
     print("")
     print("DIAG: input very hot — try CAST_INPUT_GAIN_DB=-24 in .env")
+    print("      (meters inherit CAST_INPUT_GAIN_DB via AUDIO_LEVEL_INPUT_TRIM_DB)")
 if l_stats and l_stats[2] > -12:
     print("DIAG: tinny USB interfaces — enable CAST_STREAM_EQ=1 CAST_HIGH_CUT_HZ=12000")
 PY
 
 echo ""
 echo "Wav saved: $OUT"
-echo "Meter tuning: AUDIO_LEVEL_AUTO_RANGE=1  AUDIO_LEVEL_FLOOR_DB=-58  AUDIO_LEVEL_CEIL_DB=6"
+echo "Meter tuning: AUDIO_LEVEL_AUTO_RANGE=1  AUDIO_LEVEL_INPUT_TRIM_DB=<same as CAST_INPUT_GAIN_DB>"

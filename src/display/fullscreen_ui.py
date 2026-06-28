@@ -5,7 +5,7 @@ import tkinter as tk
 from typing import TYPE_CHECKING, Callable, Optional
 
 from src.audio.alsa_device import capture_is_shared, resolve_capture_device
-from src.audio.levels import LevelMeterState
+from src.audio.levels import LevelMeterState, trim_linear_levels
 from src.boot_timing import log_milestone
 from src.config.settings import AppSettings
 from src.display.bars_widget import AudioBarsWidget
@@ -769,13 +769,22 @@ class FullscreenApp:
             self.controller.stop_stream()
         self.root.after(0, self._finish_stop_cast_ui)
 
+    def _meter_input_levels(self, rms_linear: float, peak_linear: float) -> tuple[float, float]:
+        return trim_linear_levels(
+            rms_linear,
+            peak_linear,
+            self.settings.level_input_trim_db,
+        )
+
     def _update_audio_ui(self) -> None:
         rms_linear = 0.0
         peak_linear = 0.0
         if self.listener is not None:
             snapshot = self.listener.get_latest_snapshot()
-            rms_linear = snapshot.levels.rms_linear
-            peak_linear = snapshot.levels.peak_linear
+            rms_linear, peak_linear = self._meter_input_levels(
+                snapshot.levels.rms_linear,
+                snapshot.levels.peak_linear,
+            )
         self.bars.update_levels(
             rms_linear=rms_linear,
             peak_linear=peak_linear,
@@ -839,8 +848,10 @@ class FullscreenApp:
         rms = peak = 0.0
         if self.listener is not None:
             snapshot = self.listener.get_latest_snapshot()
-            rms = snapshot.levels.rms_linear
-            peak = snapshot.levels.peak_linear
+            rms, peak = self._meter_input_levels(
+                snapshot.levels.rms_linear,
+                snapshot.levels.peak_linear,
+            )
         snap["level"] = self.bars.display_level(rms, peak)
         snap["rms"] = rms
         snap["peak"] = peak

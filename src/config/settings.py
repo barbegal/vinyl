@@ -46,6 +46,7 @@ class AppSettings:
     level_ceil_db: float = 6.0
     level_auto_range: bool = True
     level_auto_decay: float = 0.993
+    level_input_trim_db: float = -21.0
 
     cast_discovery_timeout: float = 12.0
     cast_refresh_interval: float = 6.0
@@ -138,6 +139,10 @@ class AppSettings:
             level_ceil_db=float(os.getenv("AUDIO_LEVEL_CEIL_DB", "6")),
             level_auto_range=_env_bool("AUDIO_LEVEL_AUTO_RANGE", True),
             level_auto_decay=float(os.getenv("AUDIO_LEVEL_AUTO_DECAY", "0.993")),
+            level_input_trim_db=float(
+                os.getenv("AUDIO_LEVEL_INPUT_TRIM_DB", "").strip()
+                or os.getenv("CAST_INPUT_GAIN_DB", "-21")
+            ),
             cast_discovery_timeout=float(os.getenv("CAST_DISCOVERY_TIMEOUT", "12")),
             cast_refresh_interval=float(os.getenv("CAST_REFRESH_INTERVAL", "6")),
             cast_known_hosts=known_hosts,
