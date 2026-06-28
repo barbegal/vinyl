@@ -83,7 +83,9 @@ run_diagnosis() {
       echo "$p:"
       grep -E '^(dtoverlay=pitft|dtparam=spi|dtparam=i2c|dtoverlay=vc4|disable_splash)' "$p" 2>/dev/null | sed 's/^/  /' || echo "  (no pitft line)"
       if grep -qE '^dtoverlay=pitft28-resistive' "$p" 2>/dev/null; then
-        echo "  WARNING: pitft28-resistive — capacitive panel needs 28c: sudo bash scripts/recover.sh --display 270 28c"
+        echo "  panel overlay: resistive (28r)"
+      elif grep -qE '^dtoverlay=pitft28-capacitive' "$p" 2>/dev/null; then
+        echo "  panel overlay: capacitive (28c)"
       fi
       grep -qE '^dtparam=spi=on' "$p" 2>/dev/null || echo "  WARNING: no 'dtparam=spi=on' — pitft overlay CANNOT bind → no /dev/fb1"
       if grep -qE '^dtoverlay=pitft28.*drm' "$p" 2>/dev/null; then
@@ -94,7 +96,7 @@ run_diagnosis() {
         echo "        If fb1 exists but TFT is black, try 'vc4-fkms-v3d' instead, or add 'fbcon=map:10' to cmdline.txt."
       fi
       dup="$(grep -c '^disable_splash=' "$p" 2>/dev/null || echo 0)"
-      [[ "$dup" -gt 1 ]] && echo "  WARNING: duplicate disable_splash lines — run: sudo ./scripts/setup_pitft.sh 270 28c"
+      [[ "$dup" -gt 1 ]] && echo "  WARNING: duplicate disable_splash lines — run: sudo ./scripts/setup_pitft.sh 270 28r"
       btn="$(grep -c '^dtoverlay=gpio-key,gpio=' "$p" 2>/dev/null || echo 0)"
       if [[ "$btn" -eq 0 ]]; then
         echo "  WARNING: no plate button overlays — run: sudo ./scripts/setup_pitft_buttons.sh"

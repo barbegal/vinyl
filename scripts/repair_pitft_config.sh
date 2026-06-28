@@ -6,7 +6,7 @@
 set -euo pipefail
 
 ROTATE="${1:-270}"
-PANEL="${2:-28c}"
+PANEL="${2:-28r}"
 
 if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
   echo "Run with sudo: sudo bash scripts/repair_pitft_config.sh [rotation] [28r|28c]"

@@ -28,6 +28,28 @@ sudo apt install -y python3-venv python3-tk ffmpeg portaudio19-dev fonts-roboto 
 
 ## Setup
 
+### Raspberry Pi (fresh SD card — one command)
+
+After flashing vanilla Raspberry Pi OS and logging in as your user (e.g. `vinyl`):
+
+```bash
+git clone <repo-url> ~/Desktop/vinyl
+cd ~/Desktop/vinyl
+bash scripts/setup_pi.sh
+```
+
+This installs apt packages, creates the Python venv, configures the **resistive PiTFT (28r @ 270°)**, kiosk boot, `.env`, and USB shared capture. Options:
+
+```bash
+bash scripts/setup_pi.sh --buttons    # plate GPIO keys (↑↓ Enter ←)
+bash scripts/setup_pi.sh --connect    # x11vnc + Raspberry Pi Connect mirror
+PITFT_TYPE=28c PITFT_ROTATE=90 bash scripts/setup_pi.sh   # capacitive override
+```
+
+After reboot, set `USB_ALSA_DEVICE=hw:N,0` in `.env` from `arecord -l` if the default card number is wrong, then `bash scripts/recover.sh && sudo reboot`.
+
+### Dev machine (Mac/Linux)
+
 ```bash
 cd /Users/danthony/Documents/GitHub/vinyl
 python3 -m venv .venv
@@ -63,9 +85,11 @@ The login session owns the VT, so X starts cleanly and fast.
 ```bash
 cd /home/vinyl/Desktop/vinyl
 chmod +x scripts/install_service.sh
-./scripts/install_service.sh
+PITFT_TYPE=28r PITFT_ROTATE=270 ./scripts/install_service.sh
 sudo reboot
 ```
+
+Or use **`scripts/setup_pi.sh`** (above) which runs this plus venv, `.env`, and USB capture in one step.
 
 The installer:
 
@@ -107,16 +131,16 @@ main UI appears (~30–45s on Pi 4, ~22–35s on Pi 5). Set `VINYL_BOOT_DEBUG=0`
 it. The speaker list keeps filling for another **6–20s** via auto-refresh. Milestones are logged
 to `~/.vinyl-boot.log`; run `./scripts/diagnose_boot.sh` to review them.
 
-### Adafruit 2.8" PiTFT notes (capacitive 28c / resistive 28r)
+### Adafruit 2.8" PiTFT notes (resistive 28r / capacitive 28c)
 
 The PiTFT is an **SPI framebuffer** (`/dev/fb1`), not HDMI/KMS. Rotation lives in the
 `config.txt` overlay (`dtoverlay=pitft28-…,rotate=…`), not `xrandr`. The display setup is
 the same for both panels; only the touch controller differs:
 
+- **Resistive (28r)** — STMPE over SPI (**default** for this project)
 - **Capacitive (28c)** — FT6206 over **I²C** (installer enables I²C automatically)
-- **Resistive (28r)** — STMPE over SPI
 
-The installer defaults to capacitive. To force a panel/rotation, set env vars:
+The installer defaults to **resistive 28r @ 270°**. To force a panel/rotation:
 
 ```bash
 PITFT_TYPE=28c PITFT_ROTATE=270 ./scripts/install_service.sh
@@ -127,18 +151,19 @@ console mapping, and touch driver, then re-run ours:
 
 ```bash
 # In a venv per Bookworm; see Adafruit's guide
-sudo -E env PATH=$PATH python3 adafruit-pitft.py --display=28c --rotation=270 --install-type=console
+sudo -E env PATH=$PATH python3 adafruit-pitft.py --display=28r --rotation=270 --install-type=console
 ```
 
 If the image is upside down, flip the rotation and reboot:
 
 ```bash
-sudo ./scripts/setup_pitft.sh 90 28c    # rotation then panel
+sudo ./scripts/setup_pitft.sh 90 28r    # rotation then panel
 sudo reboot
 ```
 
-Touch uses a rotation-aware `CalibrationMatrix` matched via `MatchIsTouchscreen` (works for
-either controller). If taps land in the wrong place, confirm the device with `xinput list`,
+Resistive touch uses evdev `Calibration` + axis swap per rotation (`99-pitft-touch.conf`).
+Capacitive touch relies on overlay flags — do not add a conflicting libinput matrix.
+If taps land in the wrong place, confirm the device with `xinput list`,
 re-run `setup_pitft.sh` with the matching rotation, or use the Adafruit installer.
 
 **Touch not working / unsure which controller?** Detect the actual hardware:
@@ -151,7 +176,7 @@ It scans I²C (capacitive FT6206 sits at `0x38`), checks the loaded overlay and 
 devices, and prints the exact fix command. Then apply it, e.g.:
 
 ```bash
-sudo ./scripts/setup_pitft.sh 270 28c   # capacitive  (or 28r for resistive)
+sudo ./scripts/setup_pitft.sh 270 28r   # resistive  (or 28c for capacitive)
 sudo reboot
 ```
 

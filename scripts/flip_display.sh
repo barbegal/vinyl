@@ -2,7 +2,7 @@
 # Flip PiTFT 90° ↔ 270° (common fix when the image is upside down).
 set -euo pipefail
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PANEL="${1:-28c}"
+PANEL="${1:-28r}"
 CONFIG=""
 for p in /boot/firmware/config.txt /boot/config.txt; do
   [[ -f "$p" ]] && CONFIG="$p" && break

@@ -4,7 +4,7 @@
 #
 # Usage: sudo ./scripts/setup_pitft.sh [rotation] [panel] [user]
 #   rotation: 0|90|180|270   (default 270 — matched your working display)
-#   panel:    28c|28r        (default 28c, capacitive)
+#   panel:    28c|28r        (default 28r, resistive)
 set -euo pipefail
 
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -15,7 +15,7 @@ if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
 fi
 
 ROTATE="${1:-270}"
-PANEL="${2:-28c}"
+PANEL="${2:-28r}"
 APP_USER="${3:-${SUDO_USER:-vinyl}}"
 INSTALL_BUTTONS=0
 

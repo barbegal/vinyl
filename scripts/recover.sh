@@ -2,7 +2,7 @@
 # One-shot recovery: permissions, SSH-safe login hooks, xinitrc, .env.
 #   bash scripts/recover.sh              — usual fix after git pull
 #   bash scripts/recover.sh --repair-config [rotation] [28r|28c] — nuclear config.txt fix
-#   bash scripts/recover.sh --display 270 28c
+#   bash scripts/recover.sh --display 270 28r
 set -euo pipefail
 
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -15,7 +15,7 @@ DISPLAY_FIX=0
 STRIP_BUTTONS=0
 REPAIR_CONFIG=0
 ROTATE=270
-PANEL=28c
+PANEL=28r
 
 usage() {
   cat <<EOF
@@ -194,25 +194,6 @@ if [[ "$INSTALL_BUTTONS" -eq 1 ]]; then
   echo "=== plate buttons (GPIO 17/22/23/27 — NOT 25) ==="
   sudo bash "$APP_DIR/scripts/setup_pitft_buttons.sh"
 fi
-
-_resistive_overlay=0
-for _cfg in /boot/firmware/config.txt /boot/config.txt; do
-  if [[ -f "$_cfg" ]] && grep -qE '^dtoverlay=pitft28-resistive' "$_cfg" 2>/dev/null; then
-    _resistive_overlay=1
-    break
-  fi
-done
-if [[ "$_resistive_overlay" -eq 1 && "$DISPLAY_FIX" -eq 0 && "$REPAIR_CONFIG" -eq 0 ]]; then
-  echo ""
-  echo "=== display: pitft28-resistive → 28c (capacitive panel) ==="
-  for _cfg in /boot/firmware/config.txt /boot/config.txt; do
-    if [[ -f "$_cfg" ]] && grep -qE '^dtoverlay=pitft28.*drm' "$_cfg" 2>/dev/null; then
-      sudo sed -i '/^dtoverlay=pitft28/s/,drm//g; s/drm,//g' "$_cfg"
-    fi
-  done
-  sudo bash "$APP_DIR/scripts/setup_pitft.sh" "$ROTATE" "28c" "$USER_NAME"
-fi
-unset _resistive_overlay _cfg
 
 echo ""
 if [[ -x "$APP_DIR/.venv/bin/python" ]]; then

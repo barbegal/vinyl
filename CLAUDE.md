@@ -20,12 +20,12 @@ The user runs the app on an **Adafruit 2.8" PiTFT** attached to the Pi:
 
 | Detail | Value |
 |--------|--------|
-| Panel | **28c** (capacitive, FT6206 touch on I²C `0x38`) — not 28r unless explicitly switched |
+| Panel | **28r** (resistive, STMPE touch over SPI) — use **28c** only for capacitive FT6206 panels |
 | Resolution | 320×240 |
 | Framebuffer | SPI → **`/dev/fb1`** (HDMI is typically `/dev/fb0`) |
-| Overlay | `dtoverlay=pitft28-capacitive,rotate=…` in `config.txt` |
+| Overlay | `dtoverlay=pitft28-resistive,rotate=…` in `config.txt` |
 | Rotation | Set in overlay (`rotate=90` or `270`), **not** via `xrandr` or `display_rotate` |
-| Touch | Capacitive: overlay touch flags (`touch-swapxy`, `touch-invx/y`). Use evdev in X (`99-pitft-touch.conf`). **Do not** add libinput `CalibrationMatrix` for 28c — it conflicts with overlay flags. |
+| Touch | Resistive: evdev + `Calibration`/`SwapAxes` in `99-pitft-touch.conf` per rotation. Capacitive (28c): overlay touch flags only — **do not** add libinput `CalibrationMatrix` for 28c. |
 
 Xorg is configured to render to the PiTFT via fbdev (`/etc/X11/xorg.conf.d/99-pitft.conf`). Boot sets `FRAMEBUFFER=/dev/fb1` before `startx`.
 
@@ -125,6 +125,7 @@ If `ui visible on tft` exceeds the SLO, check: slow SD card, extra `systemd` uni
 
 | Script | When to use |
 |--------|-------------|
+| **`setup_pi.sh`** | **One-shot fresh SD install** (deps, venv, PiTFT 28r, kiosk, `.env`) |
 | **`recover.sh`** | Broken boot / black TFT / after `git pull` (`--display` for panel fix) |
 | **`diagnose_boot.sh`** | Health check (`--report` → paste `~/.vinyl-report.txt`) |
 | **`install_service.sh`** | First-time kiosk install |
@@ -140,6 +141,12 @@ Pi recovery after pull:
 
 ```bash
 cd /home/vinyl/Desktop/vinyl && git pull && bash scripts/recover.sh && sudo reboot
+```
+
+Fresh SD card (vanilla Pi OS):
+
+```bash
+git clone <repo-url> ~/Desktop/vinyl && cd ~/Desktop/vinyl && bash scripts/setup_pi.sh
 ```
 
 ## Code layout
@@ -165,8 +172,8 @@ cd /home/vinyl/Desktop/vinyl && git pull && bash scripts/recover.sh && sudo rebo
 ## Common pitfalls (recent history)
 
 1. **Black screen on boot** — UI blocked before `mainloop()` (fixed: defer discovery/audio via `after()`); or `start_app.sh` not executable; or stale `~/.xinitrc` with literal `@APP_DIR@`
-2. **Wrong overlay `28r` on capacitive panel** — blank/broken display; use `28c`
-3. **Upside-down image** — flip with `setup_pitft.sh 90 28c` or `270 28c`
+2. **Wrong overlay type** — blank display or bad touch; resistive panel needs **28r**, capacitive needs **28c** (`detect_touch.sh`)
+3. **Upside-down image** — flip with `setup_pitft.sh 90 28r` or `270 28r`
 4. **Touch wrong/missing** — run `detect_touch.sh`; confirm overlay touch flags match rotation; disable conflicting libinput calibration
 5. **Profile.d bug** — `[ -n DISPLAY ]` without `$` caused early exit (fixed in installer)
 6. **Only one speaker on first load** — normal until auto-refresh runs; `CastBrowser` warms up over several seconds
