@@ -23,8 +23,8 @@ def friendly_cast_error(exc: Exception) -> str:
     if "connection" in lower or "refused" in lower or "unreachable" in lower:
         return "Cannot reach speaker — check Wi-Fi"
 
-    if "ffmpeg" in lower or "alsa" in lower:
-        return "Audio input error — check USB_ALSA_DEVICE in .env"
+    if "ffmpeg" in lower or "alsa" in lower or "error opening input" in lower:
+        return "Audio input busy — check USB mic and USB_ALSA_DEVICE in .env"
 
     if len(msg) > 72:
         return msg[:69] + "..."

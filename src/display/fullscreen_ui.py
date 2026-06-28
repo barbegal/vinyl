@@ -145,6 +145,21 @@ class FullscreenApp:
         if self.controller is None:
             self.controller = ChromecastStreamController(settings=self.settings)
 
+    def _release_audio_for_stream(self) -> None:
+        """Free the USB mic so ffmpeg can capture via ALSA (one client at a time)."""
+        if self.listener is not None:
+            self.listener.stop()
+
+    def _resume_audio_monitor(self) -> None:
+        """Restart level monitoring after cast stops."""
+        if self.listener is None:
+            return
+        if self.listener.start():
+            return
+        err = self.listener.last_error
+        if err and self._active_uuid is None and not self._cast_busy:
+            self._set_subtitle(err, ERROR)
+
     def _ensure_cast_stack(self) -> None:
         self._ensure_audio()
         self._ensure_cast()
@@ -420,6 +435,7 @@ class FullscreenApp:
             if self._active_uuid is not None and self.controller is not None:
                 self.controller.stop_stream()
 
+            self._release_audio_for_stream()
             target = self.targets[index]
             fresh_info = self.discovery.fresh_cast_info(target)
             ok = self.controller.start_stream(
@@ -448,18 +464,21 @@ class FullscreenApp:
             msg = status.message if status and status.message else "Cast failed — tap ↻"
             self._set_subtitle(msg, ERROR)
             log_milestone(f"cast connect failed: {msg}")
+            self._resume_audio_monitor()
 
     def _finish_cast_error(self, err: str) -> None:
         self._cast_busy = False
         self._active_uuid = None
         self._apply_target_styles()
         self._set_subtitle(err, ERROR)
+        self._resume_audio_monitor()
 
     def _finish_stop_cast_ui(self) -> None:
         self._cast_busy = False
         self._active_uuid = None
         self._apply_target_styles()
         self._set_subtitle(self._idle_subtitle if self.targets else "No speakers — tap ↻")
+        self._resume_audio_monitor()
 
     def _rebuild_target_buttons(self) -> None:
         for child in self.targets_frame.winfo_children():
@@ -764,13 +783,24 @@ class FullscreenApp:
         threading.Thread(target=self._load_audio_worker, daemon=True).start()
 
     def _load_audio_worker(self) -> None:
-        try:
-            self._ensure_audio()
-            input_ok = self.listener.start()
-            error = self.listener.last_error
-        except Exception as exc:
-            input_ok = False
-            error = str(exc)
+        import time
+
+        input_ok = False
+        error: str | None = None
+        for attempt in range(6):
+            try:
+                self._ensure_audio()
+                input_ok = self.listener.start()
+                error = self.listener.last_error
+                if input_ok:
+                    break
+                if error and "opening" not in error.lower():
+                    break
+            except Exception as exc:
+                input_ok = False
+                error = str(exc)
+            if attempt < 5:
+                time.sleep(1.0)
 
         self.root.after(
             0,

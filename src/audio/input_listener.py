@@ -103,18 +103,32 @@ class AudioInputListener:
                 self._latest = snapshot
 
         try:
-            self._stream = sd.InputStream(
-                samplerate=self.sample_rate,
-                channels=self.channels,
-                blocksize=self.block_size,
-                device=self._choose_device(),
-                dtype="float32",
-                callback=callback,
-            )
-            self._stream.start()
-            self._running = True
-            self._last_error = None
-            return True
+            last_exc: Exception | None = None
+            channel_attempts = [self.channels]
+            if self.channels == 1:
+                channel_attempts.append(2)
+
+            for attempt_channels in channel_attempts:
+                try:
+                    self._stream = sd.InputStream(
+                        samplerate=self.sample_rate,
+                        channels=attempt_channels,
+                        blocksize=self.block_size,
+                        device=self._choose_device(),
+                        dtype="float32",
+                        callback=callback,
+                    )
+                    self._stream.start()
+                    self._running = True
+                    self._last_error = None
+                    return True
+                except Exception as exc:
+                    last_exc = exc
+                    self._stream = None
+                    self._running = False
+
+            self._last_error = str(last_exc) if last_exc else "audio input unavailable"
+            return False
         except Exception as exc:
             self._last_error = str(exc)
             self._stream = None
