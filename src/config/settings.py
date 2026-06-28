@@ -31,7 +31,7 @@ class AppSettings:
     hls_bitrate: str = "192k"
     stream_input_gain_db: float = -9.0
     stream_high_cut_hz: int = 0
-    cast_output_volume: float = 0.50
+    cast_output_volume: float = 1.0
     cast_ffmpeg_queue_size: int = 64
     cast_rtbufsize: str = "16k"
     cast_low_latency: bool = True
@@ -100,7 +100,7 @@ class AppSettings:
                     "CAST_HIGH_CUT_HZ", profile, "stream_high_cut_hz", 0, int
                 )
             ),
-            cast_output_volume=float(os.getenv("CAST_OUTPUT_VOLUME", "0.50")),
+            cast_output_volume=float(os.getenv("CAST_OUTPUT_VOLUME", "1.0")),
             cast_ffmpeg_queue_size=int(
                 env_or_profile(
                     "CAST_FFMPEG_QUEUE_SIZE", profile, "cast_ffmpeg_queue_size", 64, int

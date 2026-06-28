@@ -36,7 +36,7 @@ class AudioCalibration:
     measured_rms_db: float = -120.0
     cast_input_gain_db: float = -9.0
     cast_high_cut_hz: int = 14000
-    cast_output_volume: float = 0.50
+    cast_output_volume: float = 1.0
     cast_stereo_mode: str = "stereo"
     cast_eq_bass_db: float = 4.0
     cast_eq_treble_db: float = 2.5
@@ -214,7 +214,7 @@ def run_calibration(
         measured_rms_db=round(best_rms_db, 1),
         cast_input_gain_db=recommend_gain_db(best_peak),
         cast_high_cut_hz=16000,
-        cast_output_volume=0.50,
+        cast_output_volume=1.0,
         cast_stereo_mode="stereo",
         cast_eq_bass_db=4.0,
         cast_eq_treble_db=2.5,
