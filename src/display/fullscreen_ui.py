@@ -78,6 +78,9 @@ class FullscreenApp:
         self._cast_busy = False
         self._scan_busy = False
         self._auto_cast_done = False
+        self._cast_request_lock = threading.Lock()
+        self._cast_pending_index: int | None = None
+        self._cast_worker_running = False
         self._web_snapshot_lock = threading.Lock()
         self._web_snapshot: dict = {}
 
@@ -464,54 +467,103 @@ class FullscreenApp:
     def _on_target_tap(self, index: int) -> None:
         if index >= len(self.targets):
             return
-        if self._cast_busy:
-            self._post_status("Still connecting…")
-            return
 
         self._focus_index = index
         self._apply_target_styles()
         self._scroll_focused_into_view()
+
+        with self._cast_request_lock:
+            self._cast_pending_index = index
+            worker_running = self._cast_worker_running
+
         self._cast_busy = True
         self._publish_web_snapshot()
         target = self.targets[index]
         self._post_status(f"Connecting to {target.name}…")
 
-        import threading
+        # Barge-in: stop the in-flight connect so the worker can switch speakers.
+        if worker_running and self.controller is not None:
+            threading.Thread(target=self.controller.stop_stream, daemon=True).start()
 
-        threading.Thread(
-            target=self._tap_worker,
-            args=(index,),
-            daemon=True,
-        ).start()
+        if not worker_running:
+            with self._cast_request_lock:
+                self._cast_worker_running = True
+            threading.Thread(target=self._cast_worker_loop, daemon=True).start()
+
+    def _cast_request_pending(self) -> bool:
+        with self._cast_request_lock:
+            return self._cast_pending_index is not None
+
+    def _cast_worker_loop(self) -> None:
+        while True:
+            with self._cast_request_lock:
+                index = self._cast_pending_index
+                self._cast_pending_index = None
+                if index is None:
+                    self._cast_worker_running = False
+                    return
+
+            try:
+                superseded = self._run_cast_request(index)
+            except Exception as exc:
+                superseded = self._cast_request_pending()
+                if not superseded:
+                    err = str(exc)
+                    self.root.after(0, lambda e=err: self._finish_cast_error(e))
+                continue
+
+            if superseded:
+                continue
+
+    def _run_cast_request(self, index: int) -> bool:
+        """Connect or disconnect for one tap. Returns True if a newer tap superseded this one."""
+
+        def should_abort() -> bool:
+            with self._cast_request_lock:
+                pending = self._cast_pending_index
+            return pending is not None and pending != index
+
+        self._ensure_cast_stack()
+        if index >= len(self.targets):
+            return False
+
+        tapped_uuid = self.targets[index].uuid
+
+        if self._active_uuid is not None and tapped_uuid == self._active_uuid:
+            if self.controller is not None:
+                self.controller.stop_stream()
+            if not self._cast_request_pending():
+                self.root.after(0, self._finish_stop_cast_ui)
+            return self._cast_request_pending()
+
+        if self.controller is not None:
+            self.controller.stop_stream()
+        if should_abort():
+            return True
+
+        self._release_audio_for_stream()
+        if should_abort():
+            return True
+
+        target = self.targets[index]
+        fresh_info = self.discovery.fresh_cast_info(target)
+        ok = self.controller.start_stream(
+            target,
+            zconf=self.discovery.zconf,
+            cast_info=fresh_info,
+            on_status=self._post_status,
+            should_abort=should_abort,
+        )
+        if should_abort():
+            return True
+
+        status = self.controller.status
+        self.root.after(0, lambda i=index, o=ok, s=status: self._finish_cast_ui(i, o, s))
+        return False
 
     def _tap_worker(self, index: int) -> None:
-        try:
-            self._ensure_cast_stack()
-            tapped_uuid = self.targets[index].uuid
-
-            if self._active_uuid is not None and tapped_uuid == self._active_uuid:
-                if self.controller is not None:
-                    self.controller.stop_stream()
-                self.root.after(0, self._finish_stop_cast_ui)
-                return
-
-            if self._active_uuid is not None and self.controller is not None:
-                self.controller.stop_stream()
-
-            self._release_audio_for_stream()
-            target = self.targets[index]
-            fresh_info = self.discovery.fresh_cast_info(target)
-            ok = self.controller.start_stream(
-                target,
-                zconf=self.discovery.zconf,
-                cast_info=fresh_info,
-                on_status=self._post_status,
-            )
-            status = self.controller.status
-            self.root.after(0, lambda: self._finish_cast_ui(index, ok, status))
-        except Exception as exc:
-            err = str(exc)
-            self.root.after(0, lambda: self._finish_cast_error(err))
+        """Legacy entry point — routes through the coalesced worker."""
+        self._on_target_tap(index)
 
     def _finish_cast_ui(self, index: int, ok: bool, status) -> None:
         self._cast_busy = False
@@ -693,10 +745,7 @@ class FullscreenApp:
             ).start()
             return
 
-        self._apply_refresh_targets(
-            self.discovery.discover(wait_seconds=1.0),
-            merge=True,
-        )
+        threading.Thread(target=self._auto_refresh_worker, daemon=True).start()
 
     def _refresh_worker(self) -> None:
         import time
@@ -753,15 +802,25 @@ class FullscreenApp:
         self._update_status_text()
         self._publish_web_snapshot()
 
+        threading.Thread(target=self._auto_refresh_worker, daemon=True).start()
+
+    def _auto_refresh_worker(self) -> None:
+        try:
+            found = (
+                self.discovery.discover(wait_seconds=0.0)
+                if self.discovery is not None
+                else []
+            )
+        except Exception:
+            found = []
+        self.root.after(0, lambda t=found: self._apply_refresh_targets(t, merge=True))
+
     def _auto_refresh(self) -> None:
-        if self.discovery is not None:
-            found = self.discovery.discover(wait_seconds=1.0)
-            self._apply_refresh_targets(found, merge=True)
+        if self.discovery is not None and not self._scan_busy:
+            threading.Thread(target=self._auto_refresh_worker, daemon=True).start()
         self._auto_after_id = self.root.after(self._refresh_ms, self._auto_refresh)
 
     def stop_cast(self) -> None:
-        import threading
-
         threading.Thread(target=self._stop_cast_worker, daemon=True).start()
 
     def _stop_cast_worker(self) -> None:

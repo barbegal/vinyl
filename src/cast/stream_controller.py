@@ -3,6 +3,7 @@ from __future__ import annotations
 import shutil
 import socket
 import subprocess
+import threading
 import time
 from dataclasses import dataclass
 from typing import Callable, Optional
@@ -289,6 +290,7 @@ class ChromecastStreamController:
         self._ffmpeg_proc: Optional[subprocess.Popen] = None
         self._chromecast = None
         self._status = StreamStatus(False, "", "Idle", "")
+        self._stream_lock = threading.Lock()
 
     @property
     def status(self) -> StreamStatus:
@@ -332,12 +334,19 @@ class ChromecastStreamController:
         zconf=None,
         cast_info=None,
         on_status: Optional[Callable[[str], None]] = None,
+        should_abort: Optional[Callable[[], bool]] = None,
     ) -> bool:
         def say(message: str) -> None:
             if on_status is not None:
                 on_status(message)
 
+        def aborted() -> bool:
+            return should_abort is not None and should_abort()
+
         self.stop_stream()
+
+        if aborted():
+            return False
 
         if pychromecast is None or get_chromecast_from_cast_info is None:
             self._set_status(False, target.name, "Run: pip install -r requirements.txt")
@@ -368,9 +377,16 @@ class ChromecastStreamController:
             say("Waiting for speaker…")
             self._chromecast.wait(timeout=12.0)
 
+            if aborted():
+                self.stop_stream()
+                return False
+
             codecs = cast_codec_fallback_chain(self.settings.cast_stream_codec)
             last_err = ""
             for codec in codecs:
+                if aborted():
+                    self.stop_stream()
+                    return False
                 stream_fmt = stream_format_for_codec(codec)
                 stream_url = f"http://{host_ip}:{port}/{stream_fmt.path}"
                 if codec != self.settings.cast_stream_codec:
@@ -379,6 +395,9 @@ class ChromecastStreamController:
                 ffmpeg_err = ""
                 started = False
                 for attempt in range(4):
+                    if aborted():
+                        self.stop_stream()
+                        return False
                     say("Starting audio stream…")
                     ok, ffmpeg_err = self._start_ffmpeg_listen(port, codec)
                     if ok:
@@ -434,23 +453,30 @@ class ChromecastStreamController:
             return False
 
     def stop_stream(self) -> None:
-        if self._chromecast is not None:
+        with self._stream_lock:
+            chromecast = self._chromecast
+            self._chromecast = None
+            ffmpeg_proc = self._ffmpeg_proc
+            self._ffmpeg_proc = None
+
+        if chromecast is not None:
             try:
-                self._chromecast.media_controller.stop()
-                self._chromecast.quit_app()
+                chromecast.media_controller.stop(timeout=2.0)
             except Exception:
                 pass
-        self._chromecast = None
-
-        if self._ffmpeg_proc is not None:
             try:
-                self._ffmpeg_proc.terminate()
-                self._ffmpeg_proc.wait(timeout=2)
+                chromecast.quit_app()
+            except Exception:
+                pass
+
+        if ffmpeg_proc is not None:
+            try:
+                ffmpeg_proc.terminate()
+                ffmpeg_proc.wait(timeout=2)
             except Exception:
                 try:
-                    self._ffmpeg_proc.kill()
+                    ffmpeg_proc.kill()
                 except Exception:
                     pass
-        self._ffmpeg_proc = None
 
         # Do not set status here — callers set success/error messages after cleanup.
