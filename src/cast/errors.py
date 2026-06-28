@@ -17,6 +17,15 @@ def friendly_cast_error(exc: Exception) -> str:
     if "not connected" in lower or "not running" in lower:
         return "Speaker disconnected — tap ↻ then try again"
 
+    if "failed to execute play" in lower:
+        return "Speaker could not start playback — tap ↻"
+
+    if "failed to execute" in lower:
+        return "Speaker rejected stream — tap ↻"
+
+    if "could not load stream" in lower:
+        return msg if len(msg) <= 72 else msg[:69] + "..."
+
     if "timeout" in lower or "timed out" in lower:
         return "Speaker timed out — tap ↻ and try again"
 

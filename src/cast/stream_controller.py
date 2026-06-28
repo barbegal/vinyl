@@ -67,14 +67,41 @@ def _ffmpeg_error(proc: subprocess.Popen) -> str:
         return "ffmpeg failed"
 
 
-def _wait_for_ffmpeg_listen(proc: subprocess.Popen, timeout: float = 8.0) -> bool:
+def _port_listening(port: int) -> bool:
+    """True when something is LISTENing on port (does not connect to ffmpeg)."""
+    try:
+        out = subprocess.run(
+            ["ss", "-ltn", f"sport", f"= :{port}"],
+            capture_output=True,
+            text=True,
+            timeout=1,
+        )
+        return f":{port}" in out.stdout
+    except Exception:
+        return False
+
+
+def _wait_for_ffmpeg_listen(proc: subprocess.Popen, port: int, timeout: float = 8.0) -> bool:
     """Wait for ffmpeg -listen to bind without connecting (that would steal the client)."""
     deadline = time.time() + timeout
     while time.time() < deadline:
         if proc.poll() is not None:
             return False
-        time.sleep(0.25)
+        if _port_listening(port):
+            return True
+        time.sleep(0.15)
     return proc.poll() is None
+
+
+def _cast_load_error(media_controller) -> str:
+    """Return a user-facing error when LOAD never opened a media session."""
+    status = media_controller.status
+    if status.media_session_id is not None:
+        return ""
+    reason = (status.idle_reason or "").strip()
+    if reason:
+        return f"Speaker could not load stream ({reason})"
+    return "Speaker could not load stream — tap ↻ and try again"
 
 
 def _ensure_cast_volume(chromecast, level: float) -> None:
@@ -269,7 +296,7 @@ class ChromecastStreamController:
             stderr=subprocess.PIPE,
             text=True,
         )
-        if _wait_for_ffmpeg_listen(self._ffmpeg_proc):
+        if _wait_for_ffmpeg_listen(self._ffmpeg_proc, port):
             return True, ""
         err = _ffmpeg_error(self._ffmpeg_proc)
         if self._ffmpeg_proc.poll() is None:
@@ -355,14 +382,17 @@ class ChromecastStreamController:
                 try:
                     media_controller.play_media(stream_url, stream_fmt.mime, stream_type="LIVE")
                     media_controller.block_until_active(timeout=15)
+                    load_err = _cast_load_error(media_controller)
+                    if load_err:
+                        raise RuntimeError(load_err)
+                    # Only nudge PLAY when a session exists but is paused (autoplay handles LIVE).
+                    if media_controller.status.player_state == "PAUSED":
+                        media_controller.play()
                 except Exception as exc:
                     last_err = str(exc)
                     self.stop_stream()
                     continue
 
-                state = media_controller.status.player_state
-                if state and state != "PLAYING":
-                    media_controller.play()
                 _ensure_cast_volume(self._chromecast, self.settings.cast_output_volume)
 
                 if self._ffmpeg_proc is not None and self._ffmpeg_proc.poll() is not None:
