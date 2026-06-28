@@ -36,7 +36,7 @@ class AudioCalibration:
     measured_rms_db: float = -120.0
     cast_input_gain_db: float = -9.0
     cast_high_cut_hz: int = 14000
-    cast_output_volume: float = 0.32
+    cast_output_volume: float = 0.40
     cast_stereo_mode: str = "stereo"
 
     def to_dict(self) -> dict[str, Any]:
@@ -212,7 +212,7 @@ def run_calibration(
         measured_rms_db=round(best_rms_db, 1),
         cast_input_gain_db=recommend_gain_db(best_peak),
         cast_high_cut_hz=14000,
-        cast_output_volume=0.32,
+        cast_output_volume=0.40,
         cast_stereo_mode="stereo",
     )
     save_calibration(cal)

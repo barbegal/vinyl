@@ -23,7 +23,7 @@ captured; they cannot restore waveform flattened by ADC clipping.
 |--------|--------|
 | USB ADC peak (`introspect_audio.sh`) | **-12 to -6 dBFS** (peak ≈ 8k–18k, **not** 32768) |
 | After `CAST_INPUT_GAIN_DB` | **-18 to -12 dBFS** internal headroom |
-| `CAST_OUTPUT_VOLUME` | **0.28–0.40** by ear (default **0.32**) |
+| `CAST_OUTPUT_VOLUME` | **0.32–0.45** by ear (default **0.40**) |
 
 Quiet grooves at **-40 dBFS** or lower are normal; bar meters use auto-range for display.
 
