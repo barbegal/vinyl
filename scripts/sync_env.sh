@@ -18,6 +18,10 @@ if [[ ! -f "$ENV" ]]; then
 fi
 
 added=0
+# Ensure .env ends with a newline before appending keys (avoids merging with CAST_KNOWN_HOSTS=)
+if [[ -s "$ENV" ]] && [[ -n "$(tail -c1 "$ENV" | tr -d '\n')" ]]; then
+  printf '\n' >>"$ENV"
+fi
 while IFS= read -r line || [[ -n "$line" ]]; do
   case "$line" in
     ''|'#'*) continue ;;

@@ -25,7 +25,7 @@ def friendly_cast_error(exc: Exception) -> str:
 
     if "ffmpeg" in lower or "alsa" in lower or "error opening input" in lower:
         if "busy" in lower or "resource busy" in lower:
-            return "USB mic in use — wait or tap ↻"
+            return "USB audio in use — wait or tap ↻"
         return "Audio input error — check USB_ALSA_DEVICE in .env"
 
     if len(msg) > 72:

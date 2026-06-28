@@ -6,7 +6,15 @@ import tkinter as tk
 class AudioBarsWidget(tk.Canvas):
     """Full-screen ambient audio visualizer with a dark gradient background."""
 
-    def __init__(self, master, width: int, height: int, bars: int = 24, **kwargs):
+    def __init__(
+        self,
+        master,
+        width: int,
+        height: int,
+        bars: int = 24,
+        level_gain: float = 4.0,
+        **kwargs,
+    ):
         super().__init__(
             master,
             width=width,
@@ -16,13 +24,14 @@ class AudioBarsWidget(tk.Canvas):
             **kwargs,
         )
         self._bars = bars
+        self._level_gain = level_gain
         self._history = [0.0 for _ in range(bars)]
         self._gradient_top = (10, 12, 18)
         self._gradient_bottom = (20, 24, 34)
 
     def update_levels(self, rms_linear: float, peak_linear: float) -> None:
         del peak_linear
-        value = max(0.0, min(1.0, float(rms_linear) * 3.0))
+        value = max(0.0, min(1.0, float(rms_linear) * self._level_gain))
         self._history.pop(0)
         self._history.append(value)
         self._redraw()

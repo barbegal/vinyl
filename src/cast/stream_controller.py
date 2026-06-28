@@ -1,18 +1,13 @@
 from __future__ import annotations
 
-import os
 import shutil
 import socket
 import subprocess
-import tempfile
-import threading
 import time
 from dataclasses import dataclass
-from functools import partial
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
 from typing import Callable, Optional
 
+from src.audio.alsa_device import resolve_capture_device
 from src.cast.errors import friendly_cast_error
 from src.cast.group_discovery import CastTarget
 from src.config.settings import AppSettings
@@ -56,59 +51,6 @@ def _local_ip_for_lan() -> str:
     return "127.0.0.1"
 
 
-class _HlsHandler(SimpleHTTPRequestHandler):
-    """Serve HLS files; Chromecasts often drop connections mid-segment."""
-
-    def log_message(self, *_args) -> None:
-        return
-
-    def handle_one_request(self) -> None:
-        try:
-            super().handle_one_request()
-        except (BrokenPipeError, ConnectionResetError):
-            pass
-
-    def do_GET(self) -> None:
-        try:
-            super().do_GET()
-        except (BrokenPipeError, ConnectionResetError):
-            pass
-
-
-class _HlsServer:
-    def __init__(self, root: Path, host: str, port: int) -> None:
-        self.root = root
-        self.host = host
-        self.port = port
-        self._server: Optional[ThreadingHTTPServer] = None
-        self._thread: Optional[threading.Thread] = None
-
-    def start(self) -> None:
-        handler = partial(_HlsHandler, directory=str(self.root))
-        self._server = ThreadingHTTPServer((self.host, self.port), handler)
-        self._server.daemon_threads = True
-        self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
-        self._thread.start()
-
-    def stop(self) -> None:
-        if self._server is not None:
-            self._server.shutdown()
-            self._server.server_close()
-        self._server = None
-        self._thread = None
-
-
-def _wait_for_hls(playlist: Path, timeout: float = 8.0) -> bool:
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        if playlist.exists() and playlist.stat().st_size > 0:
-            segment = playlist.parent / "live0.ts"
-            if segment.exists() or any(playlist.parent.glob("*.ts")):
-                return True
-        time.sleep(0.25)
-    return playlist.exists() and playlist.stat().st_size > 0
-
-
 def _ffmpeg_error(proc: subprocess.Popen) -> str:
     if proc.stderr is None:
         return "ffmpeg failed"
@@ -119,12 +61,40 @@ def _ffmpeg_error(proc: subprocess.Popen) -> str:
         return "ffmpeg failed"
 
 
+def _wait_for_ffmpeg_listen(proc: subprocess.Popen, timeout: float = 8.0) -> bool:
+    """Wait for ffmpeg -listen to bind without connecting (that would steal the client)."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if proc.poll() is not None:
+            return False
+        time.sleep(0.25)
+    return proc.poll() is None
+
+
+def _ensure_cast_volume(chromecast, level: float) -> None:
+    try:
+        if chromecast.status.volume_muted:
+            chromecast.set_volume_muted(False)
+        chromecast.set_volume(max(0.0, min(1.0, level)))
+    except Exception:
+        pass
+
+
+def _stream_audio_filter(settings: AppSettings) -> str:
+    parts: list[str] = []
+    gain = settings.stream_input_gain_db
+    if gain != 0.0:
+        parts.append(f"volume={gain:.1f}dB")
+    parts.append("highpass=f=40")
+    if settings.stream_high_cut_hz > 0:
+        parts.append(f"lowpass=f={settings.stream_high_cut_hz}")
+    return ",".join(parts)
+
+
 class ChromecastStreamController:
     def __init__(self, settings: AppSettings) -> None:
         self.settings = settings
         self._ffmpeg_proc: Optional[subprocess.Popen] = None
-        self._server: Optional[_HlsServer] = None
-        self._hls_root: Optional[Path] = None
         self._chromecast = None
         self._status = StreamStatus(False, "", "Idle", "")
 
@@ -135,7 +105,8 @@ class ChromecastStreamController:
     def _set_status(self, active: bool, target: str, message: str, url: str = "") -> None:
         self._status = StreamStatus(active, target, message, url)
 
-    def _build_ffmpeg_cmd(self, playlist_path: Path) -> list[str]:
+    def _build_ffmpeg_cmd(self, port: int) -> list[str]:
+        capture = resolve_capture_device(self.settings.usb_alsa_device)
         return [
             self.settings.ffmpeg_bin,
             "-hide_banner",
@@ -150,22 +121,24 @@ class ChromecastStreamController:
             "-sample_rate",
             str(self.settings.sample_rate),
             "-i",
-            self.settings.usb_alsa_device,
+            capture,
+            "-af",
+            _stream_audio_filter(self.settings),
+            "-ac",
+            "2",
             "-c:a",
-            "aac",
+            "libmp3lame",
             "-b:a",
             self.settings.hls_bitrate,
-            "-f",
-            "hls",
-            "-hls_time",
-            str(self.settings.hls_segment_seconds),
-            "-hls_list_size",
-            "10",
-            "-hls_flags",
-            "append_list+omit_endlist",
-            "-hls_allow_cache",
+            "-compression_level",
             "0",
-            str(playlist_path),
+            "-f",
+            "mp3",
+            "-content_type",
+            "audio/mpeg",
+            "-listen",
+            "1",
+            f"http://0.0.0.0:{port}/stream.mp3",
         ]
 
     def start_stream(
@@ -196,6 +169,9 @@ class ChromecastStreamController:
             self._set_status(False, target.name, "Pi has no LAN IP — check Wi-Fi")
             return False
 
+        port = self.settings.hls_http_port
+        stream_url = f"http://{host_ip}:{port}/stream.mp3"
+
         try:
             say(f"Connecting to {target.name}…")
             self._chromecast = get_chromecast_from_cast_info(
@@ -208,11 +184,8 @@ class ChromecastStreamController:
             say("Waiting for speaker…")
             self._chromecast.wait(timeout=12.0)
 
-            self._hls_root = Path(tempfile.mkdtemp(prefix="pi-audio-hls-"))
-            playlist = self._hls_root / "live.m3u8"
-
             say("Starting audio stream…")
-            cmd = self._build_ffmpeg_cmd(playlist)
+            cmd = self._build_ffmpeg_cmd(port)
             ffmpeg_err = ""
             for attempt in range(4):
                 self._ffmpeg_proc = subprocess.Popen(
@@ -221,7 +194,7 @@ class ChromecastStreamController:
                     stderr=subprocess.PIPE,
                     text=True,
                 )
-                if _wait_for_hls(playlist):
+                if _wait_for_ffmpeg_listen(self._ffmpeg_proc):
                     break
                 ffmpeg_err = _ffmpeg_error(self._ffmpeg_proc)
                 busy = "busy" in ffmpeg_err.lower() or "resource" in ffmpeg_err.lower()
@@ -233,26 +206,31 @@ class ChromecastStreamController:
                         pass
                 self._ffmpeg_proc = None
                 if busy and attempt < 3:
-                    say("Mic busy — retrying…")
-                    time.sleep(0.5)
+                    say("Audio in use — retrying…")
+                    time.sleep(1.0)
                     continue
                 self._set_status(
                     False,
                     target.name,
-                    ffmpeg_err if ffmpeg_err else "ffmpeg did not produce HLS stream",
+                    ffmpeg_err if ffmpeg_err else "ffmpeg did not start stream",
                 )
                 self.stop_stream()
                 return False
 
-            self._server = _HlsServer(self._hls_root, host_ip, self.settings.hls_http_port)
-            self._server.start()
-
-            stream_url = f"http://{host_ip}:{self.settings.hls_http_port}/live.m3u8"
-
             say("Sending to speaker…")
             media_controller = self._chromecast.media_controller
-            media_controller.play_media(stream_url, "application/vnd.apple.mpegurl")
-            media_controller.block_until_active(timeout=12)
+            media_controller.play_media(stream_url, "audio/mp3", stream_type="LIVE")
+            media_controller.block_until_active(timeout=20)
+            state = media_controller.status.player_state
+            if state and state != "PLAYING":
+                media_controller.play()
+                time.sleep(0.5)
+            _ensure_cast_volume(self._chromecast, self.settings.cast_output_volume)
+
+            if self._ffmpeg_proc is not None and self._ffmpeg_proc.poll() is not None:
+                self._set_status(False, target.name, _ffmpeg_error(self._ffmpeg_proc))
+                self.stop_stream()
+                return False
 
             self._set_status(True, target.name, "Streaming", stream_url)
             return True
@@ -280,22 +258,5 @@ class ChromecastStreamController:
                 except Exception:
                     pass
         self._ffmpeg_proc = None
-
-        if self._server is not None:
-            try:
-                self._server.stop()
-            except Exception:
-                pass
-        self._server = None
-
-        if self._hls_root is not None and self._hls_root.exists():
-            try:
-                for child in self._hls_root.iterdir():
-                    if child.is_file():
-                        child.unlink(missing_ok=True)
-                os.rmdir(self._hls_root)
-            except Exception:
-                pass
-        self._hls_root = None
 
         # Do not set status here — callers set success/error messages after cleanup.

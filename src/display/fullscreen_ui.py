@@ -4,6 +4,7 @@ import threading
 import tkinter as tk
 from typing import TYPE_CHECKING, Callable, Optional
 
+from src.audio.alsa_device import capture_is_shared, resolve_capture_device
 from src.boot_timing import log_milestone
 from src.config.settings import AppSettings
 from src.display.bars_widget import AudioBarsWidget
@@ -132,6 +133,8 @@ class FullscreenApp:
             channels=self.settings.channels,
             block_size=self.settings.block_size,
             preferred_device_name=self.settings.input_device_name,
+            alsa_device=resolve_capture_device(self.settings.usb_alsa_device),
+            hw_device=self.settings.usb_alsa_device,
         )
 
     def _ensure_cast(self) -> None:
@@ -150,7 +153,10 @@ class FullscreenApp:
             self.controller = ChromecastStreamController(settings=self.settings)
 
     def _release_audio_for_stream(self) -> None:
-        """Free the USB mic so ffmpeg can capture via ALSA (one client at a time)."""
+        """Free the USB input so ffmpeg can capture via ALSA (unless vinyl_in dsnoop)."""
+        if capture_is_shared(self.settings.usb_alsa_device):
+            return
+
         import time
 
         if self.listener is not None:
@@ -282,6 +288,7 @@ class FullscreenApp:
             self.root,
             width=layout["bars_w"],
             height=content_h,
+            level_gain=self.settings.level_display_gain,
         )
         self.bars.place(
             x=layout["bars_x"],
@@ -826,8 +833,8 @@ class FullscreenApp:
             snapshot = self.listener.get_latest_snapshot()
             rms = snapshot.levels.rms_linear
             peak = snapshot.levels.peak_linear
-        # Match AudioBarsWidget: rms_linear * 3, clamped to 0..1.
-        snap["level"] = max(0.0, min(1.0, rms * 3.0))
+        gain = self.settings.level_display_gain
+        snap["level"] = max(0.0, min(1.0, rms * gain))
         snap["rms"] = rms
         snap["peak"] = peak
         return snap

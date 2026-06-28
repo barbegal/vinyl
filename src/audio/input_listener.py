@@ -8,6 +8,7 @@ from typing import Optional
 import numpy as np
 
 from src.audio.levels import AudioLevels, calculate_audio_levels
+from src.audio.alsa_device import portaudio_device_hint
 
 try:
     import sounddevice as sd
@@ -29,11 +30,15 @@ class AudioInputListener:
         channels: int,
         block_size: int,
         preferred_device_name: str = "",
+        alsa_device: str = "",
+        hw_device: str = "",
     ) -> None:
         self.sample_rate = sample_rate
         self.channels = channels
         self.block_size = block_size
         self.preferred_device_name = preferred_device_name
+        self.alsa_device = alsa_device.strip()
+        self.hw_device = hw_device.strip()
 
         self._stream = None
         self._running = False
@@ -71,15 +76,25 @@ class AudioInputListener:
     def _choose_device(self) -> Optional[int]:
         if sd is None:
             return None
-        if not self.preferred_device_name:
-            return None
 
-        target = self.preferred_device_name.lower()
-        for idx, dev in enumerate(sd.query_devices()):
-            name = str(dev.get("name", "")).lower()
-            max_in = int(dev.get("max_input_channels", 0))
-            if max_in > 0 and target in name:
-                return idx
+        hints: list[str] = []
+        alsa_hint = portaudio_device_hint(self.alsa_device)
+        if alsa_hint:
+            hints.append(alsa_hint)
+        if self.alsa_device and self.alsa_device.lower() not in hints:
+            hints.append(self.alsa_device.lower())
+        if self.preferred_device_name:
+            hints.append(self.preferred_device_name.lower())
+        hw_hint = portaudio_device_hint(self.hw_device or self.alsa_device)
+        if hw_hint and hw_hint not in hints:
+            hints.append(hw_hint)
+
+        for hint in hints:
+            for idx, dev in enumerate(sd.query_devices()):
+                name = str(dev.get("name", "")).lower()
+                max_in = int(dev.get("max_input_channels", 0))
+                if max_in > 0 and hint in name:
+                    return idx
         return None
 
     def start(self) -> bool:
@@ -104,6 +119,12 @@ class AudioInputListener:
 
         try:
             last_exc: Exception | None = None
+            device = self._choose_device()
+            if device is None:
+                label = self.alsa_device or self.preferred_device_name or "default"
+                self._last_error = f"Microphone not found ({label})"
+                return False
+
             channel_attempts = [self.channels]
             if self.channels == 1:
                 channel_attempts.append(2)
@@ -114,7 +135,7 @@ class AudioInputListener:
                         samplerate=self.sample_rate,
                         channels=attempt_channels,
                         blocksize=self.block_size,
-                        device=self._choose_device(),
+                        device=device,
                         dtype="float32",
                         callback=callback,
                     )

@@ -119,7 +119,14 @@ else
   fi
   if grep -qE '^AUDIO_CHANNELS=1' "$APP_DIR/.env" 2>/dev/null; then
     sed -i 's/^AUDIO_CHANNELS=1/AUDIO_CHANNELS=2/' "$APP_DIR/.env"
-    echo "  set AUDIO_CHANNELS=2 (USB mic is stereo-only)"
+    echo "  set AUDIO_CHANNELS=2 (USB line-in is usually stereo)"
+    _env_changed=1
+  fi
+  if grep -qE '^CAST_KNOWN_HOSTS=CAST_' "$APP_DIR/.env" 2>/dev/null; then
+    _gain="$(sed -n 's/^CAST_KNOWN_HOSTS=CAST_INPUT_GAIN_DB=//p' "$APP_DIR/.env" | head -1)"
+    sed -i '/^CAST_KNOWN_HOSTS=CAST_/d' "$APP_DIR/.env"
+    printf 'CAST_KNOWN_HOSTS=\nCAST_INPUT_GAIN_DB=%s\n' "${_gain:--9}" >>"$APP_DIR/.env"
+    echo "  fixed merged CAST_KNOWN_HOSTS / CAST_INPUT_GAIN_DB line in .env"
     _env_changed=1
   fi
   if [[ "$_env_changed" -eq 1 ]]; then
@@ -127,6 +134,10 @@ else
   fi
   unset _env_changed _auto_val
 fi
+
+echo ""
+echo "=== USB capture (turntable / line-in for bars + cast) ==="
+bash "$APP_DIR/scripts/setup_usb_capture.sh"
 
 if command -v systemctl >/dev/null 2>&1; then
   echo ""

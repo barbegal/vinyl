@@ -26,7 +26,15 @@ class AppSettings:
     hls_http_port: int = 9000
     ffmpeg_bin: str = "ffmpeg"
     hls_segment_seconds: int = 1
-    hls_bitrate: str = "128k"
+    hls_bitrate: str = "192k"
+    # Attenuate hot line-in before encoding (dB). Typical USB phono: -6 to -12.
+    stream_input_gain_db: float = -9.0
+    # Low-pass to reduce harsh/tinny highs (Hz). 0 = off.
+    stream_high_cut_hz: int = 14_000
+    # Chromecast playback level when a stream starts (0.0–1.0).
+    cast_output_volume: float = 0.35
+    # Level bar sensitivity — higher = bars move more at the same input.
+    level_display_gain: float = 4.0
 
     cast_discovery_timeout: float = 12.0
     cast_refresh_interval: float = 6.0
@@ -69,7 +77,11 @@ class AppSettings:
             hls_http_port=int(os.getenv("HLS_HTTP_PORT", "9000")),
             ffmpeg_bin=os.getenv("FFMPEG_BIN", "ffmpeg").strip(),
             hls_segment_seconds=int(os.getenv("HLS_SEGMENT_SECONDS", "1")),
-            hls_bitrate=os.getenv("HLS_BITRATE", "128k").strip(),
+            hls_bitrate=os.getenv("HLS_BITRATE", "192k").strip(),
+            stream_input_gain_db=float(os.getenv("CAST_INPUT_GAIN_DB", "-9")),
+            stream_high_cut_hz=int(os.getenv("CAST_HIGH_CUT_HZ", "14000")),
+            cast_output_volume=float(os.getenv("CAST_OUTPUT_VOLUME", "0.35")),
+            level_display_gain=float(os.getenv("AUDIO_LEVEL_GAIN", "4.0")),
             cast_discovery_timeout=float(os.getenv("CAST_DISCOVERY_TIMEOUT", "12")),
             cast_refresh_interval=float(os.getenv("CAST_REFRESH_INTERVAL", "6")),
             cast_known_hosts=known_hosts,

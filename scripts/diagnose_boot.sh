@@ -70,6 +70,10 @@ run_diagnosis() {
   if command -v arecord >/dev/null; then
     arecord -l 2>/dev/null | grep -E '^card |USB' | sed 's/^/  /' || echo "  (no arecord devices)"
   fi
+  [[ -f "$HOME/.asoundrc" ]] && grep -q "pcm.vinyl_in" "$HOME/.asoundrc" 2>/dev/null && \
+    echo "  shared capture: ~/.asoundrc vinyl_in (bars + cast)" || \
+    echo "  shared capture: not configured — run: bash scripts/setup_usb_capture.sh"
+  echo "  line-in test: bash scripts/test_usb_audio.sh  (play a record during test)"
   command -v ffmpeg >/dev/null && echo "ffmpeg: ok" || echo "ffmpeg: MISSING (apt install ffmpeg)"
 
   ls -la /dev/fb* /dev/dri/* 2>/dev/null | sed 's/^/  /' || echo "  (no /dev/fb* or /dev/dri/*)"
